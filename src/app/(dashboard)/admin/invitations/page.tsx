@@ -89,6 +89,17 @@ export default function InvitationsPage() {
         invitedByName: userProfile.displayName,
       });
 
+      await fetch('/api/send-invitation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email,
+          token,
+          role: roleSlug,
+          invitedByName: userProfile.displayName,
+        }),
+      });
+
       const newInv: Invitation = {
         invitationId: invId,
         email,
