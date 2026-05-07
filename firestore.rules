@@ -1,0 +1,71 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ---- Helper Functions ----
+    
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    function getRoleData(roleId) {
+      return get(/databases/$(database)/documents/roles/$(roleId)).data;
+    }
+    
+    function isSuperAdmin() {
+      return isSignedIn() && getUserData().roleSlug == 'super_admin';
+    }
+    
+    function isAdmin() {
+      return isSignedIn() && (getUserData().roleSlug == 'admin' || getUserData().roleSlug == 'super_admin');
+    }
+    
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // ---- Collection Rules ----
+
+    // D1: users
+    match /users/{uid} {
+      allow read: if isSignedIn() && (isOwner(uid) || isAdmin());
+      allow create: if isSignedIn(); // Handled by seed or signup flow
+      allow update: if isSuperAdmin() || (isAdmin() && resource.data.roleSlug != 'super_admin') || (isOwner(uid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'avatarUrl', 'updatedAt']));
+    }
+    
+    // D2: roles
+    match /roles/{roleId} {
+      allow read: if isSignedIn();
+      allow write: if isSuperAdmin();
+    }
+    
+    // D3: features
+    match /features/{featureId} {
+      allow read: if isSignedIn();
+      allow write: if isSuperAdmin();
+    }
+    
+    // D4: invitations
+    match /invitations/{invId} {
+      allow read: if isSignedIn() && (isAdmin() || request.query.limit == 1); // Allow public check for token
+      allow create: if isAdmin();
+      allow update: if isAdmin() || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'acceptedBy', 'acceptedAt']));
+    }
+    
+    // D5: activity_logs
+    match /activity_logs/{logId} {
+      allow read: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow create: if isSignedIn();
+    }
+    
+    // D6: system_settings
+    match /system_settings/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isSuperAdmin();
+    }
+  }
+}
