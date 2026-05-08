@@ -7,6 +7,7 @@ import { getFeatureBySlug } from '@/lib/firebase/firestore';
 import { hasFeatureAccess } from '@/lib/utils/permissions';
 import type { Feature } from '@/lib/types';
 import PlaceholderChat from '@/components/tools/PlaceholderChat';
+import ImageGeneratorPlaceholder from '@/components/tools/ImageGeneratorPlaceholder';
 import { AlertCircle, ChevronLeft } from 'lucide-react';
 import Link from 'next/link';
 
@@ -74,7 +75,9 @@ export default function ToolPageClient({ initialSlug }: { initialSlug?: string }
       </div>
 
       <div style={{ flex: 1, minHeight: 0 }}>
-        {feature.isPlaceholder ? (
+        {feature.slug === 'image-generator' ? (
+          <ImageGeneratorPlaceholder />
+        ) : feature.isPlaceholder ? (
           <PlaceholderChat toolName={feature.name} />
         ) : (
           <div className="card" style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

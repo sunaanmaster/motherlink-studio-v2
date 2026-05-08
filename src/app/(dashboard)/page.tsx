@@ -6,8 +6,9 @@
 
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/context/AuthContext';
-import { getActiveFeatures, getUserCount, getActiveUserCount, getPendingInvitationCount } from '@/lib/firebase/firestore';
-import { hasFeatureAccess, isAdmin } from '@/lib/utils/permissions';
+import { getFeatures, getUserCount, getActiveUserCount, getPendingInvitationCount } from '@/lib/firebase/firestore';
+import { canViewFeature, isAdmin } from '@/lib/utils/permissions';
+import { FeatureStatus } from '@/lib/types';
 import type { Feature } from '@/lib/types';
 import StatsCards from '@/components/dashboard/StatsCards';
 import ToolCard from '@/components/dashboard/ToolCard';
@@ -29,18 +30,20 @@ export default function DashboardPage() {
       if (!userProfile || !userRole) return;
       
       const [allFeatures, uCount, aCount, iCount] = await Promise.all([
-        getActiveFeatures(),
+        getFeatures(),
         isAdmin(userRole) ? getUserCount() : Promise.resolve(0),
         isAdmin(userRole) ? getActiveUserCount() : Promise.resolve(0),
         isAdmin(userRole) ? getPendingInvitationCount() : Promise.resolve(0),
       ]);
 
-      setFeatures(allFeatures);
+      // Hide INACTIVE; show ACTIVE + COMING_SOON
+      const visibleFeatures = allFeatures.filter(f => f.status !== FeatureStatus.INACTIVE);
+      setFeatures(visibleFeatures);
       setStats({
         totalUsers: uCount,
         activeUsers: aCount,
         pendingInvites: iCount,
-        totalFeatures: allFeatures.length
+        totalFeatures: visibleFeatures.length
       });
     }
     loadData();
@@ -48,8 +51,8 @@ export default function DashboardPage() {
 
   if (loading || !userProfile || !userRole) return null;
 
-  const accessibleFeatures = features.filter(f => 
-    hasFeatureAccess(userProfile, userRole, f, null)
+  const accessibleFeatures = features.filter(f =>
+    canViewFeature(userProfile, userRole, f, null)
   );
 
   return (

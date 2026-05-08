@@ -36,6 +36,28 @@ export function hasFeatureAccess(
 }
 
 /**
+ * Whether a feature should be VISIBLE to the user (e.g. shown as a card on the dashboard
+ * or in the sidebar). Coming-soon features are visible but not openable.
+ * Inactive features are hidden entirely. Use hasFeatureAccess() to gate the actual click/route.
+ */
+export function canViewFeature(
+  user: UserProfile,
+  role: Role,
+  feature: Feature,
+  settings: SystemSettings | null,
+): boolean {
+  if (feature.status === FeatureStatus.INACTIVE) return false;
+
+  if (role.slug === RoleSlug.SUPER_ADMIN) return true;
+  if (role.hasAllFeatureAccess) return true;
+  if (role.slug === RoleSlug.ADMIN && settings?.defaultAdminToolAccess) return true;
+  if (role.defaultFeatureAccess.includes(feature.featureId)) return true;
+  if (user.assignedFeatureIds.includes(feature.featureId)) return true;
+
+  return false;
+}
+
+/**
  * Get all features accessible to a user
  */
 export function getAccessibleFeatures(

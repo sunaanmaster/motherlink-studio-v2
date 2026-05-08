@@ -1,16 +1,43 @@
 // ============================================================
 // Seed Script — Initializes Roles, Features, Settings, Super Admin
-// Run via: seed page or API route
+// Idempotent: each collection is checked independently
 // ============================================================
 import {
   collection,
   doc,
   setDoc,
+  getDoc,
   getDocs,
   serverTimestamp,
+  query,
+  where,
+  limit,
 } from 'firebase/firestore';
 import { db } from './config';
 import { RoleSlug, FeatureStatus, FeatureCategory, UserStatus } from '@/lib/types';
+
+export interface SeedState {
+  rolesSeeded: boolean;
+  featuresSeeded: boolean;
+  settingsSeeded: boolean;
+  superAdminExists: boolean;
+}
+
+export async function getSeedState(superAdminUid?: string): Promise<SeedState> {
+  const [roles, features, settings, superAdmin] = await Promise.all([
+    getDocs(query(collection(db, 'roles'), limit(1))),
+    getDocs(query(collection(db, 'features'), limit(1))),
+    getDoc(doc(db, 'system_settings', 'global')),
+    superAdminUid ? getDoc(doc(db, 'users', superAdminUid)) : Promise.resolve(null),
+  ]);
+
+  return {
+    rolesSeeded: !roles.empty,
+    featuresSeeded: !features.empty,
+    settingsSeeded: settings.exists(),
+    superAdminExists: !!(superAdmin && superAdmin.exists()),
+  };
+}
 
 export async function seedRoles(): Promise<Record<string, string>> {
   const rolesData = [
@@ -62,7 +89,6 @@ export async function seedRoles(): Promise<Record<string, string>> {
   ];
 
   const roleIds: Record<string, string> = {};
-
   for (const role of rolesData) {
     const ref = doc(collection(db, 'roles'));
     await setDoc(ref, {
@@ -72,7 +98,16 @@ export async function seedRoles(): Promise<Record<string, string>> {
     });
     roleIds[role.slug] = ref.id;
   }
+  return roleIds;
+}
 
+export async function getExistingRoleIds(): Promise<Record<string, string>> {
+  const snap = await getDocs(collection(db, 'roles'));
+  const roleIds: Record<string, string> = {};
+  snap.docs.forEach((d) => {
+    const data = d.data();
+    if (data.slug) roleIds[data.slug] = d.id;
+  });
   return roleIds;
 }
 
@@ -81,13 +116,13 @@ export async function seedFeatures(createdBy: string): Promise<void> {
     {
       name: 'Image Generator',
       slug: 'image-generator',
-      description: 'Generate images using AI models. Upload references or describe what you need.',
+      description: 'Generate images using AI models. Describe what you need and let AI handle the rest.',
       route: '/tools/image-generator',
       icon: 'Image',
       category: FeatureCategory.TOOL,
       status: FeatureStatus.ACTIVE,
       isPlaceholder: true,
-      supportedInputTypes: ['text_prompt', 'image_upload'],
+      supportedInputTypes: ['text_prompt'],
       toolConfig: null,
       sortOrder: 1,
     },
@@ -98,7 +133,7 @@ export async function seedFeatures(createdBy: string): Promise<void> {
       route: '/tools/writing-assistant',
       icon: 'PenTool',
       category: FeatureCategory.TOOL,
-      status: FeatureStatus.ACTIVE,
+      status: FeatureStatus.COMING_SOON,
       isPlaceholder: true,
       supportedInputTypes: ['text_prompt'],
       toolConfig: null,
@@ -111,37 +146,11 @@ export async function seedFeatures(createdBy: string): Promise<void> {
       route: '/tools/seo-assistant',
       icon: 'Search',
       category: FeatureCategory.TOOL,
-      status: FeatureStatus.ACTIVE,
+      status: FeatureStatus.COMING_SOON,
       isPlaceholder: true,
       supportedInputTypes: ['text_prompt', 'file_upload'],
       toolConfig: null,
       sortOrder: 3,
-    },
-    {
-      name: 'Documentation Q&A',
-      slug: 'documentation-qa',
-      description: 'Ask questions about internal documentation and get instant AI answers.',
-      route: '/tools/documentation-qa',
-      icon: 'BookOpen',
-      category: FeatureCategory.DOCUMENTATION,
-      status: FeatureStatus.COMING_SOON,
-      isPlaceholder: true,
-      supportedInputTypes: ['text_prompt'],
-      toolConfig: null,
-      sortOrder: 4,
-    },
-    {
-      name: 'Campaign Assistant',
-      slug: 'campaign-assistant',
-      description: 'Plan and generate marketing campaign content with AI assistance.',
-      route: '/tools/campaign-assistant',
-      icon: 'Megaphone',
-      category: FeatureCategory.TOOL,
-      status: FeatureStatus.COMING_SOON,
-      isPlaceholder: true,
-      supportedInputTypes: ['text_prompt', 'dropdown'],
-      toolConfig: null,
-      sortOrder: 5,
     },
   ];
 
@@ -192,29 +201,48 @@ export async function createSuperAdminUser(uid: string, email: string, roleId: s
 }
 
 export async function checkIfSeeded(): Promise<boolean> {
-  const snap = await getDocs(collection(db, 'roles'));
-  return snap.size > 0;
+  const state = await getSeedState();
+  return state.rolesSeeded && state.featuresSeeded && state.settingsSeeded;
 }
 
-export async function runSeed(superAdminUid: string, superAdminEmail: string): Promise<void> {
-  const alreadySeeded = await checkIfSeeded();
-  if (alreadySeeded) {
-    console.log('Database already seeded. Skipping.');
-    return;
+/**
+ * Idempotent seeder. Skips collections that are already populated.
+ * If superAdminUid is provided, also creates the user profile (only if missing).
+ */
+export async function runSeed(superAdminUid: string, superAdminEmail: string): Promise<{ seeded: string[]; skipped: string[] }> {
+  const seeded: string[] = [];
+  const skipped: string[] = [];
+  const state = await getSeedState(superAdminUid);
+
+  let roleIds: Record<string, string>;
+  if (!state.rolesSeeded) {
+    roleIds = await seedRoles();
+    seeded.push('roles');
+  } else {
+    roleIds = await getExistingRoleIds();
+    skipped.push('roles');
   }
 
-  console.log('Seeding database...');
-  const roleIds = await seedRoles();
-  console.log('Roles seeded:', roleIds);
+  if (!state.featuresSeeded) {
+    await seedFeatures(superAdminUid);
+    seeded.push('features');
+  } else {
+    skipped.push('features');
+  }
 
-  await seedFeatures(superAdminUid);
-  console.log('Features seeded');
+  if (!state.settingsSeeded) {
+    await seedSystemSettings();
+    seeded.push('settings');
+  } else {
+    skipped.push('settings');
+  }
 
-  await seedSystemSettings();
-  console.log('System settings seeded');
+  if (!state.superAdminExists && roleIds[RoleSlug.SUPER_ADMIN]) {
+    await createSuperAdminUser(superAdminUid, superAdminEmail, roleIds[RoleSlug.SUPER_ADMIN]);
+    seeded.push('super-admin user');
+  } else if (state.superAdminExists) {
+    skipped.push('super-admin user');
+  }
 
-  await createSuperAdminUser(superAdminUid, superAdminEmail, roleIds[RoleSlug.SUPER_ADMIN]);
-  console.log('Super Admin user created');
-
-  console.log('Seed complete!');
+  return { seeded, skipped };
 }

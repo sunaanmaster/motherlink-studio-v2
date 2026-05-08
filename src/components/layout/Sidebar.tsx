@@ -8,9 +8,9 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/context/AuthContext';
-import { getActiveFeatures } from '@/lib/firebase/firestore';
-import { hasFeatureAccess, isAdmin, isSuperAdmin } from '@/lib/utils/permissions';
-import type { Feature } from '@/lib/types';
+import { getFeatures } from '@/lib/firebase/firestore';
+import { canViewFeature, isAdmin, isSuperAdmin } from '@/lib/utils/permissions';
+import { FeatureStatus, type Feature } from '@/lib/types';
 import * as Icons from 'lucide-react';
 import { 
   LayoutDashboard, 
@@ -29,16 +29,17 @@ export default function Sidebar() {
 
   useEffect(() => {
     async function loadFeatures() {
-      const allFeatures = await getActiveFeatures();
-      setFeatures(allFeatures);
+      const allFeatures = await getFeatures();
+      // Hide INACTIVE; show ACTIVE + COMING_SOON
+      setFeatures(allFeatures.filter(f => f.status !== FeatureStatus.INACTIVE));
     }
     loadFeatures();
   }, []);
 
   if (loading || !userProfile || !userRole) return null;
 
-  const accessibleFeatures = features.filter(f => 
-    hasFeatureAccess(userProfile, userRole, f, null)
+  const accessibleFeatures = features.filter(f =>
+    canViewFeature(userProfile, userRole, f, null)
   );
 
   const tools = accessibleFeatures.filter(f => f.category === 'tool');
@@ -92,9 +93,34 @@ export default function Sidebar() {
             {tools.map((tool) => {
               // @ts-ignore - dynamic icon lookup
               const IconComponent = Icons[tool.icon] || Icons.HelpCircle;
+              const isComingSoon = tool.status === FeatureStatus.COMING_SOON;
+              if (isComingSoon) {
+                return (
+                  <div
+                    key={tool.featureId}
+                    className="nav-item"
+                    style={{ opacity: 0.55, cursor: 'not-allowed', justifyContent: 'space-between' }}
+                    title="Coming soon"
+                  >
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <IconComponent size={20} />
+                      <span>{tool.name}</span>
+                    </span>
+                    <span style={{
+                      fontSize: '0.625rem',
+                      fontWeight: 700,
+                      letterSpacing: '0.05em',
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      background: 'rgba(245, 158, 11, 0.15)',
+                      color: 'var(--warning)',
+                    }}>SOON</span>
+                  </div>
+                );
+              }
               return (
-                <Link 
-                  key={tool.featureId} 
+                <Link
+                  key={tool.featureId}
                   href={tool.route}
                   className={`nav-item ${pathname === tool.route ? 'active' : ''}`}
                 >
