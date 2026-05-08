@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
   const inviteUrl = `${baseUrl}/signup?token=${token}`;
 
   const { error } = await resend.emails.send({
-    from: 'Motherlink <invitations@motherlink.io>',
+    from: 'Motherlink <onboarding@resend.dev>',
     to: email,
     subject: `You've been invited to Motherlink`,
     html: `
