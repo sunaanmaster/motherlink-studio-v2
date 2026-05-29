@@ -5,12 +5,14 @@
 // ============================================================
 
 import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { runSeed, getSeedState, type SeedState } from '@/lib/firebase/seed';
 import { signupWithEmail } from '@/lib/firebase/auth';
 import { useAuth } from '@/lib/context/AuthContext';
 import { AlertCircle, CheckCircle2, Database, ShieldAlert, Wrench } from 'lucide-react';
 
 export default function SeedPage() {
+  const router = useRouter();
   const { firebaseUser } = useAuth();
   const [stateLoading, setStateLoading] = useState(true);
   const [seedState, setSeedState] = useState<SeedState | null>(null);
@@ -36,6 +38,12 @@ export default function SeedPage() {
   const isFresh = seedState && !seedState.rolesSeeded && !seedState.featuresSeeded && !seedState.settingsSeeded;
   const needsRepair = seedState && (!seedState.featuresSeeded || !seedState.settingsSeeded || !seedState.rolesSeeded);
   const fullyComplete = seedState && seedState.rolesSeeded && seedState.featuresSeeded && seedState.settingsSeeded;
+
+  useEffect(() => {
+    if (!stateLoading && fullyComplete && !result) {
+      router.replace('/');
+    }
+  }, [stateLoading, fullyComplete, result, router]);
 
   const handleFreshSeed = async (e: React.FormEvent) => {
     e.preventDefault();
