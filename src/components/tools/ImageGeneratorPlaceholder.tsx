@@ -84,7 +84,7 @@ export default function ImageGeneratorPlaceholder() {
             flex: 1,
             resize: 'none',
             padding: '12px 14px',
-            background: 'rgba(255, 255, 255, 0.04)',
+            background: 'var(--surface-2)',
             border: '1px solid var(--border)',
             borderRadius: 'var(--radius-md)',
             color: 'var(--text-main)',

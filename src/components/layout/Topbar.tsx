@@ -6,11 +6,13 @@
 
 import React from 'react';
 import { useAuth } from '@/lib/context/AuthContext';
-import { LogOut, Bell, Search, User as UserIcon } from 'lucide-react';
+import { useTheme } from '@/lib/context/ThemeContext';
+import { LogOut, Bell, Search, User as UserIcon, Sun, Moon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 export default function Topbar() {
   const { userProfile, userRole, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const router = useRouter();
 
   const handleLogout = async () => {
@@ -32,7 +34,7 @@ export default function Topbar() {
       justifyContent: 'space-between',
       position: 'sticky',
       top: 0,
-      background: 'rgba(10, 10, 12, 0.8)',
+      background: 'var(--topbar-bg)',
       backdropFilter: 'blur(10px)',
       zIndex: 10
     }}>
@@ -43,16 +45,26 @@ export default function Topbar() {
             type="text" 
             placeholder="Search tools, docs, or users..." 
             style={{ 
-              paddingLeft: '40px', 
-              height: '40px', 
+              paddingLeft: '40px',
+              height: '40px',
               fontSize: '0.875rem',
-              background: 'rgba(255, 255, 255, 0.03)'
-            }} 
+              background: 'var(--surface-1)'
+            }}
           />
         </div>
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+        <button
+          onClick={toggleTheme}
+          className="btn-outline"
+          style={{ padding: '8px', borderRadius: '50%' }}
+          title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          aria-label="Toggle theme"
+        >
+          {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
+        </button>
+
         <button className="btn-outline" style={{ padding: '8px', borderRadius: '50%' }}>
           <Bell size={20} />
         </button>

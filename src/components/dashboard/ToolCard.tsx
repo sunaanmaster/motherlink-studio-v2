@@ -25,7 +25,7 @@ export default function ToolCard({ feature }: ToolCardProps) {
     <div className={`card ${isComingSoon ? 'coming-soon' : ''}`} style={{ position: 'relative', display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
         <div style={{ 
-          background: 'rgba(255, 255, 255, 0.05)', 
+          background: 'var(--surface-2)',
           padding: '12px', 
           borderRadius: 'var(--radius-md)',
           color: isComingSoon ? 'var(--text-dim)' : 'var(--primary-light)'

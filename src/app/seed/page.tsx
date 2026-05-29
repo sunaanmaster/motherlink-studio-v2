@@ -105,7 +105,7 @@ export default function SeedPage() {
         </div>
 
         {seedState && (
-          <div style={{ marginBottom: '24px', padding: '16px', background: 'rgba(255, 255, 255, 0.03)', borderRadius: 'var(--radius-md)', fontSize: '0.875rem' }}>
+          <div style={{ marginBottom: '24px', padding: '16px', background: 'var(--surface-1)', borderRadius: 'var(--radius-md)', fontSize: '0.875rem' }}>
             <div style={{ fontWeight: 600, marginBottom: '8px' }}>Current state</div>
             <ul style={{ margin: 0, paddingLeft: '20px', color: 'var(--text-muted)' }}>
               <li>Roles: {seedState.rolesSeeded ? '✓ seeded' : '✗ missing'}</li>

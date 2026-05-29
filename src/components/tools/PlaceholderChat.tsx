@@ -92,7 +92,7 @@ export default function PlaceholderChat({ toolName }: { toolName: string }) {
               display: 'flex', 
               alignItems: 'center', 
               justifyContent: 'center',
-              background: msg.role === 'user' ? 'var(--primary)' : 'rgba(255, 255, 255, 0.05)',
+              background: msg.role === 'user' ? 'var(--primary)' : 'var(--surface-2)',
               flexShrink: 0
             }}>
               {msg.role === 'user' ? <User size={18} color="white" /> : <Sparkles size={18} className="text-primary-light" />}
@@ -102,7 +102,7 @@ export default function PlaceholderChat({ toolName }: { toolName: string }) {
               maxWidth: '80%', 
               padding: '16px', 
               borderRadius: 'var(--radius-md)',
-              background: msg.role === 'user' ? 'rgba(124, 58, 237, 0.1)' : 'rgba(255, 255, 255, 0.03)',
+              background: msg.role === 'user' ? 'rgba(124, 58, 237, 0.12)' : 'var(--surface-1)',
               border: '1px solid var(--border)',
               fontSize: '0.9375rem',
               whiteSpace: 'pre-wrap'

@@ -99,7 +99,7 @@ export default function DashboardPage() {
             ))}
           </div>
         ) : (
-          <div className="card" style={{ textAlign: 'center', padding: '64px', background: 'rgba(255, 255, 255, 0.02)' }}>
+          <div className="card" style={{ textAlign: 'center', padding: '64px', background: 'var(--row-hover)' }}>
             <Zap size={48} className="text-dim" style={{ marginBottom: '20px' }} />
             <h3>No Tools Assigned</h3>
             <p className="text-muted" style={{ maxWidth: '400px', margin: '0 auto' }}>

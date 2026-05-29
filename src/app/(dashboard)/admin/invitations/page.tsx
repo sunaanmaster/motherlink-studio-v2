@@ -194,7 +194,7 @@ export default function InvitationsPage() {
 
             <div className="input-group">
               <label className="label">Grant Tool Access (Optional)</label>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '12px', padding: '16px', background: 'rgba(255, 255, 255, 0.02)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '12px', padding: '16px', background: 'var(--row-hover)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
                 {features.filter(f => f.category === 'tool').map(f => (
                   <label key={f.featureId} style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.875rem', cursor: 'pointer' }}>
                     <input 
