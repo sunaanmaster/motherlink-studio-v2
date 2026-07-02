@@ -152,6 +152,20 @@ export async function seedFeatures(createdBy: string): Promise<void> {
       toolConfig: null,
       sortOrder: 3,
     },
+    {
+      name: 'Reddit Visibility',
+      slug: 'reddit-visibility',
+      description: 'Find high-value Reddit discussions and draft expert replies grounded in client knowledge.',
+      route: '/apps/reddit-visibility',
+      icon: 'MessageSquare',
+      category: FeatureCategory.TOOL,
+      status: FeatureStatus.ACTIVE,
+      isPlaceholder: false,
+      openInNewTab: true,
+      supportedInputTypes: ['text_prompt', 'url'],
+      toolConfig: null,
+      sortOrder: 4,
+    },
   ];
 
   for (const feature of features) {

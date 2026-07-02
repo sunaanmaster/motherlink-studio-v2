@@ -1,0 +1,15 @@
+{
+  "name": "reddit-poster-agent",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Local agent: drains the reddit_post_jobs queue and posts via AdsPower (SunBrowser) profiles, on your Mac. Verifies account+thread before posting.",
+  "main": "index.mjs",
+  "scripts": {
+    "start": "node --env-file=.env index.mjs"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.7.0",
+    "puppeteer-core": "^23.0.0"
+  }
+}

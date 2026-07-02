@@ -4,9 +4,6 @@
 // Stats Cards — Dashboard overview metrics
 // ============================================================
 
-import React from 'react';
-import { Users, UserCheck, Mail, Cpu } from 'lucide-react';
-
 interface StatsCardsProps {
   users: number;
   active: number;
@@ -14,33 +11,50 @@ interface StatsCardsProps {
   features: number;
 }
 
+const cards = [
+  { key: 'users', label: 'Users' },
+  { key: 'active', label: 'Active' },
+  { key: 'invites', label: 'Pending invites' },
+  { key: 'features', label: 'Features' },
+];
+
 export default function StatsCards({ users, active, invites, features }: StatsCardsProps) {
-  const cards = [
-    { title: 'Total Users', value: users, icon: Users, color: 'var(--info)' },
-    { title: 'Active Users', value: active, icon: UserCheck, color: 'var(--success)' },
-    { title: 'Pending Invites', value: invites, icon: Mail, color: 'var(--warning)' },
-    { title: 'Total Features', value: features, icon: Cpu, color: 'var(--primary)' },
-  ];
+  const values: Record<string, number> = { users, active, invites, features };
 
   return (
-    <div style={{ 
-      display: 'grid', 
-      gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', 
-      gap: '24px' 
-    }}>
-      {cards.map((card) => (
-        <div key={card.title} className="card" style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-          <div style={{ 
-            background: card.color.replace(')', ', 0.1)'), 
-            color: card.color,
-            padding: '12px',
-            borderRadius: 'var(--radius-md)'
-          }}>
-            <card.icon size={24} />
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+        gap: 0,
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--radius-lg)',
+        background: 'var(--bg-card)',
+        overflow: 'hidden',
+      }}
+    >
+      {cards.map((card, i) => (
+        <div
+          key={card.key}
+          style={{
+            padding: '20px 24px',
+            borderLeft: i === 0 ? 'none' : '1px solid var(--border)',
+          }}
+        >
+          <div className="eyebrow-muted" style={{ marginBottom: 10 }}>
+            {card.label}
           </div>
-          <div>
-            <div className="text-dim" style={{ fontSize: '0.875rem', fontWeight: 500 }}>{card.title}</div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{card.value}</div>
+          <div
+            className="mono"
+            style={{
+              fontSize: 28,
+              fontWeight: 500,
+              letterSpacing: '-0.04em',
+              color: 'var(--text-main)',
+              lineHeight: 1,
+            }}
+          >
+            {values[card.key].toLocaleString()}
           </div>
         </div>
       ))}

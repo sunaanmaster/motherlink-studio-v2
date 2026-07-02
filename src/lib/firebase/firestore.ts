@@ -14,6 +14,7 @@ import {
   where,
   orderBy,
   limit,
+  writeBatch,
   Timestamp,
   serverTimestamp,
   type DocumentData,
@@ -192,6 +193,15 @@ export async function updateFeature(featureId: string, data: Partial<Feature>): 
 
 export async function deleteFeature(featureId: string): Promise<void> {
   await deleteDoc(doc(db, 'features', featureId));
+}
+
+export async function updateFeaturesOrder(orders: { featureId: string; sortOrder: number }[]): Promise<void> {
+  const batch = writeBatch(db);
+  const now = serverTimestamp();
+  for (const { featureId, sortOrder } of orders) {
+    batch.update(doc(db, 'features', featureId), { sortOrder, updatedAt: now });
+  }
+  await batch.commit();
 }
 
 // ============================================================

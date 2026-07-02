@@ -10,7 +10,18 @@ import { getInvitationByToken, createUser, updateInvitation } from '@/lib/fireba
 import { signupWithEmail } from '@/lib/firebase/auth';
 import { InvitationStatus, UserStatus } from '@/lib/types';
 import type { Invitation } from '@/lib/types';
-import { User, Lock, Mail, AlertCircle, ShieldCheck } from 'lucide-react';
+import { User, Lock, Mail, AlertCircle } from 'lucide-react';
+
+function BrandWordmark({ width = 160 }: { width?: number }) {
+  return (
+    <span className="brand-wordmark" style={{ width }}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img className="logo-dark" src="/logo/dark.svg" alt="ML Studio" />
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img className="logo-light" src="/logo/light.svg" alt="ML Studio" />
+    </span>
+  );
+}
 
 function SignupForm() {
   const [invitation, setInvitation] = useState<Invitation | null>(null);
@@ -33,7 +44,7 @@ function SignupForm() {
       }
 
       const inv = await getInvitationByToken(token);
-      
+
       if (!inv) {
         setError('Invalid invitation link.');
       } else if (inv.status !== InvitationStatus.PENDING) {
@@ -56,10 +67,8 @@ function SignupForm() {
     setError(null);
 
     try {
-      // 1. Create Auth Account
       const user = await signupWithEmail(invitation.email, password, displayName);
 
-      // 2. Create Firestore Profile
       await createUser({
         uid: user.uid,
         email: invitation.email,
@@ -73,7 +82,6 @@ function SignupForm() {
         invitationId: invitation.invitationId,
       });
 
-      // 3. Mark invitation as accepted
       await updateInvitation(invitation.invitationId, {
         status: InvitationStatus.ACCEPTED,
         acceptedBy: user.uid,
@@ -88,81 +96,155 @@ function SignupForm() {
     }
   };
 
-  if (loading) return <div className="spinner"></div>;
+  if (loading) return <div className="spinner" />;
 
   return (
-    <div className="card auth-card">
-      <div className="logo-section" style={{ marginBottom: '24px', justifyContent: 'center' }}>
-        <ShieldCheck size={28} />
-        <span>Motherlink.io</span>
+    <div className="card auth-card" style={{ padding: 32 }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'center',
+          marginBottom: 28,
+        }}
+      >
+        <BrandWordmark width={140} />
       </div>
 
       {error ? (
-        <div style={{ textAlign: 'center' }}>
-          <AlertCircle size={48} className="text-error" style={{ marginBottom: '16px' }} />
-          <h3>Invitation Error</h3>
-          <p className="text-muted" style={{ marginBottom: '24px' }}>{error}</p>
-          <button className="btn btn-primary" onClick={() => router.push('/login')}>Back to Login</button>
+        <div style={{ textAlign: 'center', padding: '20px 0' }}>
+          <AlertCircle
+            size={28}
+            strokeWidth={1.5}
+            style={{ color: 'var(--error)', marginBottom: 12 }}
+          />
+          <h3 style={{ marginBottom: 6 }}>Invitation error</h3>
+          <p className="text-muted" style={{ fontSize: 13, marginBottom: 24 }}>
+            {error}
+          </p>
+          <button className="btn btn-primary" onClick={() => router.push('/login')}>
+            Back to sign in
+          </button>
         </div>
       ) : (
         <>
-          <h2 style={{ textAlign: 'center', marginBottom: '8px' }}>Join the Platform</h2>
-          <p className="text-muted" style={{ textAlign: 'center', marginBottom: '32px' }}>
-            Create your account to access the Motherlink AI platform.
+          <h2 style={{ textAlign: 'center', marginBottom: 4, fontSize: 20 }}>
+            Create your account
+          </h2>
+          <p
+            className="text-muted"
+            style={{ textAlign: 'center', marginBottom: 24, fontSize: 13 }}
+          >
+            Complete your registration to access the platform
           </p>
 
           <form onSubmit={handleSignup}>
             <div className="input-group">
-              <label className="label">Email Address</label>
+              <label className="label">Email</label>
               <div style={{ position: 'relative' }}>
-                <Mail size={18} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
-                <input type="email" value={invitation?.email} disabled style={{ paddingLeft: '44px', opacity: 0.6 }} />
-              </div>
-            </div>
-
-            <div className="input-group">
-              <label className="label">Full Name</label>
-              <div style={{ position: 'relative' }}>
-                <User size={18} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
-                <input 
-                  type="text" 
-                  placeholder="John Doe" 
-                  value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
-                  required
-                  style={{ paddingLeft: '44px' }}
+                <Mail
+                  size={14}
+                  strokeWidth={1.75}
+                  style={{
+                    position: 'absolute',
+                    left: 11,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    color: 'var(--text-dim)',
+                  }}
+                />
+                <input
+                  type="email"
+                  value={invitation?.email}
+                  disabled
+                  style={{ paddingLeft: 32 }}
                 />
               </div>
             </div>
 
             <div className="input-group">
-              <label className="label">Create Password</label>
+              <label className="label">Full name</label>
               <div style={{ position: 'relative' }}>
-                <Lock size={18} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
-                <input 
-                  type="password" 
-                  placeholder="••••••••" 
+                <User
+                  size={14}
+                  strokeWidth={1.75}
+                  style={{
+                    position: 'absolute',
+                    left: 11,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    color: 'var(--text-dim)',
+                  }}
+                />
+                <input
+                  type="text"
+                  placeholder="John Doe"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  required
+                  style={{ paddingLeft: 32 }}
+                />
+              </div>
+            </div>
+
+            <div className="input-group">
+              <label className="label">Password</label>
+              <div style={{ position: 'relative' }}>
+                <Lock
+                  size={14}
+                  strokeWidth={1.75}
+                  style={{
+                    position: 'absolute',
+                    left: 11,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    color: 'var(--text-dim)',
+                  }}
+                />
+                <input
+                  type="password"
+                  placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   minLength={6}
-                  style={{ paddingLeft: '44px' }}
+                  style={{ paddingLeft: 32 }}
                 />
               </div>
             </div>
 
-            <div style={{ marginTop: '24px', padding: '16px', background: 'rgba(124, 58, 237, 0.05)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(124, 58, 237, 0.1)', marginBottom: '24px' }}>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, marginBottom: '4px' }}>Assigned Role</div>
-              <div style={{ fontWeight: 600, color: 'var(--primary-light)' }}>{invitation?.roleSlug.toUpperCase()}</div>
+            <div
+              style={{
+                marginTop: 8,
+                padding: 12,
+                background: 'var(--surface-1)',
+                borderRadius: 'var(--radius-sm)',
+                border: '1px solid var(--border)',
+                marginBottom: 20,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+            >
+              <span className="eyebrow">Assigned role</span>
+              <span
+                className="mono"
+                style={{
+                  fontSize: 12,
+                  color: 'var(--text-main)',
+                  letterSpacing: '0.04em',
+                }}
+              >
+                {invitation?.roleSlug.toUpperCase()}
+              </span>
             </div>
 
-            <button 
-              type="submit" 
-              className="btn btn-primary" 
-              style={{ width: '100%', height: '48px' }}
+            <button
+              type="submit"
+              className="btn btn-primary btn-lg"
+              style={{ width: '100%' }}
               disabled={signingUp}
             >
-              {signingUp ? 'Creating Account...' : 'Complete Registration'}
+              {signingUp ? 'Creating account…' : 'Complete registration'}
             </button>
           </form>
         </>
@@ -174,7 +256,13 @@ function SignupForm() {
 export default function SignupPage() {
   return (
     <div className="auth-container">
-      <Suspense fallback={<div className="loading-container"><div className="spinner"></div></div>}>
+      <Suspense
+        fallback={
+          <div className="loading-container">
+            <div className="spinner" />
+          </div>
+        }
+      >
         <SignupForm />
       </Suspense>
     </div>

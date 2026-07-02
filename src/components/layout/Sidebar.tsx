@@ -1,10 +1,10 @@
 'use client';
 
 // ============================================================
-// Sidebar Component — Navigation driven by Feature Registry
+// Sidebar — Navigation driven by Feature Registry
 // ============================================================
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/context/AuthContext';
@@ -12,15 +12,26 @@ import { getFeatures } from '@/lib/firebase/firestore';
 import { canViewFeature, isAdmin, isSuperAdmin } from '@/lib/utils/permissions';
 import { FeatureStatus, type Feature } from '@/lib/types';
 import * as Icons from 'lucide-react';
-import { 
-  LayoutDashboard, 
-  Settings, 
-  Users, 
-  Mail, 
-  ListRestart, 
-  ShieldCheck,
-  Cpu
+import {
+  LayoutDashboard,
+  Settings,
+  Users,
+  Mail,
+  ListRestart,
+  Cpu,
+  User,
 } from 'lucide-react';
+
+function BrandWordmark({ width = 96 }: { width?: number }) {
+  return (
+    <span className="brand-wordmark" style={{ width }}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img className="logo-dark" src="/logo/dark.svg" alt="ML Studio" />
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img className="logo-light" src="/logo/light.svg" alt="ML Studio" />
+    </span>
+  );
+}
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -28,12 +39,19 @@ export default function Sidebar() {
   const [features, setFeatures] = useState<Feature[]>([]);
 
   useEffect(() => {
+    let cancelled = false;
     async function loadFeatures() {
       const allFeatures = await getFeatures();
-      // Hide INACTIVE; show ACTIVE + COMING_SOON
+      if (cancelled) return;
       setFeatures(allFeatures.filter(f => f.status !== FeatureStatus.INACTIVE));
     }
     loadFeatures();
+    const handler = () => loadFeatures();
+    window.addEventListener('features:changed', handler);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('features:changed', handler);
+    };
   }, []);
 
   if (loading || !userProfile || !userRole) return null;
@@ -46,18 +64,18 @@ export default function Sidebar() {
   const docs = accessibleFeatures.filter(f => f.category === 'documentation');
 
   const navItems = [
-    { name: 'Dashboard', href: '/', icon: LayoutDashboard },
+    { name: 'Overview', href: '/', icon: LayoutDashboard },
   ];
 
-  const adminItems = [];
+  const adminItems: { name: string; href: string; icon: typeof Users }[] = [];
   if (isAdmin(userRole)) {
     adminItems.push(
       { name: 'Users', href: '/admin/users', icon: Users },
       { name: 'Invitations', href: '/admin/invitations', icon: Mail },
-      { name: 'Activity Logs', href: '/admin/logs', icon: ListRestart },
+      { name: 'Activity', href: '/admin/logs', icon: ListRestart },
     );
   }
-  
+
   if (isSuperAdmin(userRole)) {
     adminItems.push(
       { name: 'Features', href: '/admin/features', icon: Cpu },
@@ -68,20 +86,18 @@ export default function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="logo-section">
-        <ShieldCheck size={28} />
-        <span>Motherlink</span>
+        <BrandWordmark width={96} />
       </div>
 
-      <nav style={{ flex: 1, overflowY: 'auto' }}>
+      <nav style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
         <div className="nav-section">
-          <div className="nav-title">Menu</div>
           {navItems.map((item) => (
-            <Link 
-              key={item.href} 
+            <Link
+              key={item.href}
               href={item.href}
               className={`nav-item ${pathname === item.href ? 'active' : ''}`}
             >
-              <item.icon size={20} />
+              <item.icon size={16} strokeWidth={1.75} />
               <span>{item.name}</span>
             </Link>
           ))}
@@ -89,7 +105,7 @@ export default function Sidebar() {
 
         {tools.length > 0 && (
           <div className="nav-section">
-            <div className="nav-title">AI Tools</div>
+            <div className="nav-title">Tools</div>
             {tools.map((tool) => {
               // @ts-ignore - dynamic icon lookup
               const IconComponent = Icons[tool.icon] || Icons.HelpCircle;
@@ -99,22 +115,27 @@ export default function Sidebar() {
                   <div
                     key={tool.featureId}
                     className="nav-item"
-                    style={{ opacity: 0.55, cursor: 'not-allowed', justifyContent: 'space-between' }}
+                    style={{ opacity: 0.5, cursor: 'not-allowed', justifyContent: 'space-between' }}
                     title="Coming soon"
                   >
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <IconComponent size={20} />
-                      <span>{tool.name}</span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                      <IconComponent size={16} strokeWidth={1.75} />
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {tool.name}
+                      </span>
                     </span>
-                    <span style={{
-                      fontSize: '0.625rem',
-                      fontWeight: 700,
-                      letterSpacing: '0.05em',
-                      padding: '2px 6px',
-                      borderRadius: '4px',
-                      background: 'rgba(245, 158, 11, 0.15)',
-                      color: 'var(--warning)',
-                    }}>SOON</span>
+                    <span
+                      className="mono"
+                      style={{
+                        fontSize: '9.5px',
+                        fontWeight: 500,
+                        letterSpacing: '0.08em',
+                        textTransform: 'uppercase',
+                        color: 'var(--text-dim)',
+                      }}
+                    >
+                      Soon
+                    </span>
                   </div>
                 );
               }
@@ -123,9 +144,12 @@ export default function Sidebar() {
                   key={tool.featureId}
                   href={tool.route}
                   className={`nav-item ${pathname === tool.route ? 'active' : ''}`}
+                  {...(tool.openInNewTab ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
                 >
-                  <IconComponent size={20} />
-                  <span>{tool.name}</span>
+                  <IconComponent size={16} strokeWidth={1.75} />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {tool.name}
+                  </span>
                 </Link>
               );
             })}
@@ -139,12 +163,12 @@ export default function Sidebar() {
               // @ts-ignore
               const IconComponent = Icons[doc.icon] || Icons.Book;
               return (
-                <Link 
-                  key={doc.featureId} 
+                <Link
+                  key={doc.featureId}
                   href={doc.route}
                   className={`nav-item ${pathname === doc.route ? 'active' : ''}`}
                 >
-                  <IconComponent size={20} />
+                  <IconComponent size={16} strokeWidth={1.75} />
                   <span>{doc.name}</span>
                 </Link>
               );
@@ -154,14 +178,14 @@ export default function Sidebar() {
 
         {adminItems.length > 0 && (
           <div className="nav-section">
-            <div className="nav-title">Management</div>
+            <div className="nav-title">Admin</div>
             {adminItems.map((item) => (
-              <Link 
-                key={item.href} 
+              <Link
+                key={item.href}
                 href={item.href}
                 className={`nav-item ${pathname === item.href ? 'active' : ''}`}
               >
-                <item.icon size={20} />
+                <item.icon size={16} strokeWidth={1.75} />
                 <span>{item.name}</span>
               </Link>
             ))}
@@ -169,10 +193,10 @@ export default function Sidebar() {
         )}
       </nav>
 
-      <div style={{ marginTop: 'auto', paddingTop: '20px', borderTop: '1px solid var(--border)' }}>
+      <div style={{ marginTop: 'auto', paddingTop: 8, borderTop: '1px solid var(--border)' }}>
         <Link href="/profile" className={`nav-item ${pathname === '/profile' ? 'active' : ''}`}>
-          <Icons.User size={20} />
-          <span>Profile Settings</span>
+          <User size={16} strokeWidth={1.75} />
+          <span>Profile</span>
         </Link>
       </div>
     </aside>

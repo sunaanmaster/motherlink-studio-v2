@@ -73,6 +73,16 @@ export enum LogAction {
   // Tool
   TOOL_OPENED = 'tool.opened',
   TOOL_USED = 'tool.used',
+  // Reddit Visibility
+  REDDIT_PROJECT_CREATED = 'reddit.project_created',
+  REDDIT_PROJECT_UPDATED = 'reddit.project_updated',
+  REDDIT_PROJECT_DELETED = 'reddit.project_deleted',
+  REDDIT_HISTORY_CLEANED = 'reddit.history_cleaned',
+  REDDIT_SOURCE_ADDED = 'reddit.source_added',
+  REDDIT_POSTS_FETCHED = 'reddit.posts_fetched',
+  REDDIT_POST_ANALYZED = 'reddit.post_analyzed',
+  REDDIT_DRAFT_GENERATED = 'reddit.draft_generated',
+  REDDIT_DRAFT_POSTED = 'reddit.draft_posted',
   // Settings
   SETTINGS_UPDATED = 'settings.updated',
   // Security
@@ -138,6 +148,7 @@ export interface Feature {
   category: FeatureCategory;
   status: FeatureStatus;
   isPlaceholder: boolean;
+  openInNewTab?: boolean;
   supportedInputTypes: string[];
   toolConfig: ToolConfig | null;
   sortOrder: number;

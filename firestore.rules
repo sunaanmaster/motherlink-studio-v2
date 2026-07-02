@@ -67,5 +67,24 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow write: if isSuperAdmin();
     }
+
+    // Reddit Visibility — projects shared across all users with feature access.
+    // MVP: gate on isSignedIn(); client-side hasFeatureAccess() guards UI.
+    // TODO: tighten to a feature-access check once rules are migrated.
+    match /reddit_projects/{projectId} {
+      allow read, write: if isSignedIn();
+    }
+    match /reddit_sources/{sourceId} {
+      allow read, write: if isSignedIn();
+    }
+    match /reddit_posts/{postId} {
+      allow read, write: if isSignedIn();
+    }
+    match /reddit_opportunity_analyses/{analysisId} {
+      allow read, write: if isSignedIn();
+    }
+    match /reddit_drafts/{draftId} {
+      allow read, write: if isSignedIn();
+    }
   }
 }
