@@ -1,0 +1,85 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Motherlink Poster — Settings</title>
+    <style>
+      body { font-family: -apple-system, system-ui, sans-serif; margin: 0; padding: 22px; color: #111; }
+      h1 { font-size: 17px; margin: 0 0 4px; }
+      p.sub { color: #666; font-size: 12px; margin: 0 0 18px; }
+      .row { margin-bottom: 16px; }
+      label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 6px; }
+      input[type="text"] { width: 100%; padding: 7px 9px; border: 1px solid #ccc; border-radius: 7px; font-size: 13px; box-sizing: border-box; }
+      .check { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 400; }
+      button { font-size: 13px; padding: 7px 14px; border-radius: 8px; border: 1px solid #ccc; background: #f5f5f7; cursor: pointer; }
+      button.primary { background: #3D3AAD; color: #fff; border-color: #3D3AAD; }
+      .key-status { font-size: 12px; margin-top: 6px; }
+      .ok { color: #1a9d4b; } .bad { color: #c0392b; }
+      .actions { margin-top: 22px; display: flex; gap: 10px; }
+    </style>
+  </head>
+  <body>
+    <h1>Motherlink Poster</h1>
+    <p class="sub">Set this once. Then the app posts automatically whenever AdsPower is open.</p>
+
+    <div class="row">
+      <label>1. Firebase key (service-account.json)</label>
+      <button id="pick">Choose file…</button>
+      <div id="keyStatus" class="key-status"></div>
+    </div>
+
+    <div class="row">
+      <label>2. AdsPower Local API</label>
+      <input type="text" id="adspower" />
+    </div>
+
+    <div class="row">
+      <label>3. Where the tool lives (Open the tool link)</label>
+      <input type="text" id="toolUrl" />
+    </div>
+
+    <div class="row">
+      <label class="check"><input type="checkbox" id="dryRun" /> Dry run (type but don't submit — for testing)</label>
+    </div>
+
+    <div class="actions">
+      <button class="primary" id="save">Save &amp; Start</button>
+      <button id="close">Close</button>
+    </div>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      let hasKey = false;
+
+      async function load() {
+        const c = await window.poster.getConfig();
+        $('adspower').value = c.adspowerApi || '';
+        $('toolUrl').value = c.toolUrl || '';
+        $('dryRun').checked = !!c.dryRun;
+        hasKey = !!c.hasServiceAccount;
+        renderKey();
+      }
+      function renderKey(projectId) {
+        $('keyStatus').innerHTML = hasKey
+          ? '<span class="ok">✓ Key loaded' + (projectId ? ' (' + projectId + ')' : '') + '</span>'
+          : '<span class="bad">No key selected yet</span>';
+      }
+      $('pick').onclick = async () => {
+        const r = await window.poster.pickServiceAccount();
+        if (r.ok) { hasKey = true; renderKey(r.projectId); }
+        else if (r.error) { $('keyStatus').innerHTML = '<span class="bad">' + r.error + '</span>'; }
+      };
+      $('save').onclick = async () => {
+        if (!hasKey) { $('keyStatus').innerHTML = '<span class="bad">Please choose the Firebase key first.</span>'; return; }
+        await window.poster.saveConfig({
+          adspowerApi: $('adspower').value.trim(),
+          toolUrl: $('toolUrl').value.trim(),
+          dryRun: $('dryRun').checked,
+        });
+        window.close();
+      };
+      $('close').onclick = () => window.close();
+      load();
+    </script>
+  </body>
+</html>

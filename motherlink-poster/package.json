@@ -1,0 +1,41 @@
+{
+  "name": "motherlink-poster",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Motherlink Poster — menu-bar app that runs the Reddit posting agent (drives AdsPower). No terminal needed.",
+  "main": "main.js",
+  "author": "Motherlink",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --mac dmg"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "io.motherlink.poster",
+    "productName": "Motherlink Poster",
+    "files": ["main.js", "settings.html", "settings-preload.js"],
+    "extraResources": [
+      {
+        "from": "../reddit-poster-agent",
+        "to": "agent",
+        "filter": [
+          "**/*",
+          "!.env",
+          "!.env.example",
+          "!service-account.json",
+          "!*.png",
+          "!*.log",
+          "!menubar/**",
+          "!.gitignore"
+        ]
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": ["dmg"]
+    }
+  }
+}
