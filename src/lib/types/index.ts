@@ -83,6 +83,10 @@ export enum LogAction {
   REDDIT_POST_ANALYZED = 'reddit.post_analyzed',
   REDDIT_DRAFT_GENERATED = 'reddit.draft_generated',
   REDDIT_DRAFT_POSTED = 'reddit.draft_posted',
+  // HTML Hosting
+  HTML_PAGE_DEPLOYED = 'html_page.deployed',
+  HTML_PAGE_UPDATED = 'html_page.updated',
+  HTML_PAGE_DELETED = 'html_page.deleted',
   // Settings
   SETTINGS_UPDATED = 'settings.updated',
   // Security

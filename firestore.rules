@@ -112,5 +112,16 @@ service cloud.firestore {
     match /reddit_agent_status/{docId} {
       allow read: if isSignedIn();
     }
+
+    // ---- HTML Hosting ----
+    // Server-only. Pages (and their password hashes) are read and written
+    // exclusively through the Admin SDK in /api/html-hosting and /s/{id}, so a
+    // password-protected page cannot be fetched straight from Firestore.
+    match /hosted_pages/{pageId} {
+      allow read, write: if false;
+      match /chunks/{chunkId} {
+        allow read, write: if false;
+      }
+    }
   }
 }

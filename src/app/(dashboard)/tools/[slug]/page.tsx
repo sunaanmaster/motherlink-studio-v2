@@ -12,7 +12,8 @@ export function generateStaticParams() {
     'writing-assistant',
     'seo-assistant',
     'documentation-qa',
-    'campaign-assistant'
+    'campaign-assistant',
+    'html-hosting'
   ];
   
   return defaultSlugs.map((slug) => ({

@@ -166,6 +166,19 @@ export async function seedFeatures(createdBy: string): Promise<void> {
       toolConfig: null,
       sortOrder: 4,
     },
+    {
+      name: 'HTML Hosting',
+      slug: 'html-hosting',
+      description: 'Upload an HTML file and get a shareable link, with optional password protection.',
+      route: '/tools/html-hosting',
+      icon: 'Globe',
+      category: FeatureCategory.TOOL,
+      status: FeatureStatus.ACTIVE,
+      isPlaceholder: false,
+      supportedInputTypes: ['file_upload'],
+      toolConfig: null,
+      sortOrder: 5,
+    },
   ];
 
   for (const feature of features) {
