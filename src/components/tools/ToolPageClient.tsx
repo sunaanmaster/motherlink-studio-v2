@@ -8,6 +8,8 @@ import { hasFeatureAccess } from '@/lib/utils/permissions';
 import type { Feature } from '@/lib/types';
 import PlaceholderChat from '@/components/tools/PlaceholderChat';
 import ImageGeneratorPlaceholder from '@/components/tools/ImageGeneratorPlaceholder';
+import HtmlHosting from '@/components/tools/HtmlHosting';
+import { HTML_HOSTING_FEATURE_SLUG } from '@/lib/html-hosting/types';
 import { AlertCircle, ChevronLeft } from 'lucide-react';
 import Link from 'next/link';
 
@@ -77,6 +79,8 @@ export default function ToolPageClient({ initialSlug }: { initialSlug?: string }
       <div style={{ flex: 1, minHeight: 0 }}>
         {feature.slug === 'image-generator' ? (
           <ImageGeneratorPlaceholder />
+        ) : feature.slug === HTML_HOSTING_FEATURE_SLUG ? (
+          <HtmlHosting />
         ) : feature.isPlaceholder ? (
           <PlaceholderChat toolName={feature.name} />
         ) : (
