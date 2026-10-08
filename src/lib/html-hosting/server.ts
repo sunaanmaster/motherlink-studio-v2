@@ -6,6 +6,7 @@
 //   hosted_pages/{id}/chunks/{...}    gzipped HTML, split to fit the
 //                                     1 MiB document limit
 //   hosted_uploads/{uploadId}         an upload in progress
+//   hosted_slugs/{slug}               custom link name → page id
 // Security rules deny all client access to these collections, so a
 // password-protected page can only be read through /s/{id}.
 //
@@ -35,12 +36,15 @@ import {
   MAX_HTML_BYTES,
   MAX_PASSWORD_LENGTH,
   MIN_PASSWORD_LENGTH,
+  SLUG_HINT,
+  SLUG_PATTERN,
   UPLOAD_PART_BYTES,
   type HostedPage,
 } from './types';
 
 const COLLECTION = 'hosted_pages';
 const UPLOADS = 'hosted_uploads';
+const SLUGS = 'hosted_slugs';
 const CHUNK_BYTES = 750 * 1024;
 const STALE_UPLOAD_MS = 60 * 60 * 1000;
 const UNLOCK_TTL_SECONDS = 7 * 24 * 60 * 60;
@@ -93,6 +97,14 @@ export function validateHtmlFileName(raw: unknown): string {
 export function cleanTitle(raw: unknown, fallback: string): string {
   const title = typeof raw === 'string' ? raw.trim() : '';
   return (title || fallback).slice(0, 120);
+}
+
+/** Normalises a custom link name. Empty means "back to the default link" (null). */
+export function validateSlug(raw: unknown): string | null {
+  const slug = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  if (!slug) return null;
+  if (!SLUG_PATTERN.test(slug)) throw new HttpError(400, `Link name must be ${SLUG_HINT}.`);
+  return slug;
 }
 
 export function validatePassword(raw: unknown): string {
@@ -187,7 +199,7 @@ export function createUnlockCookie(page: StoredPage, secure: boolean): string {
   const value = `${expires}.${signUnlock(page, expires)}`;
   return [
     `${unlockCookieName(page.id)}=${value}`,
-    `Path=/s/${page.id}`,
+    `Path=/s/${pageKey(page)}`,
     `Max-Age=${UNLOCK_TTL_SECONDS}`,
     'HttpOnly',
     'SameSite=Lax',
@@ -209,6 +221,8 @@ export function isUnlocked(page: StoredPage, cookieValue: string | undefined): b
 
 export interface StoredPage extends PasswordFields {
   id: string;
+  /** Custom link name, or null while the page is served from its id. */
+  slug: string | null;
   title: string;
   fileName: string;
   sizeBytes: number;
@@ -229,6 +243,7 @@ function toDate(value: unknown): Date {
 function fromDoc(id: string, data: DocumentData): StoredPage {
   return {
     id,
+    slug: data.slug ?? null,
     title: data.title,
     fileName: data.fileName,
     sizeBytes: data.sizeBytes,
@@ -248,6 +263,8 @@ function fromDoc(id: string, data: DocumentData): StoredPage {
 export function toHostedPage(page: StoredPage, caller: Caller): HostedPage {
   return {
     id: page.id,
+    urlKey: pageKey(page),
+    slug: page.slug,
     title: page.title,
     fileName: page.fileName,
     sizeBytes: page.sizeBytes,
@@ -258,6 +275,15 @@ export function toHostedPage(page: StoredPage, caller: Caller): HostedPage {
     updatedAt: page.updatedAt.toISOString(),
     canManage: caller.isAdmin || caller.uid === page.ownerUid,
   };
+}
+
+/** Last part of the page's public link. */
+export function pageKey(page: StoredPage): string {
+  return page.slug ?? page.id;
+}
+
+function slugRef(slug: string) {
+  return adminDb().collection(SLUGS).doc(slug);
 }
 
 function pageRef(id: string) {
@@ -294,6 +320,35 @@ export async function getPage(id: string): Promise<StoredPage | null> {
   const snap = await pageRef(id).get();
   const data = snap.data();
   return data ? fromDoc(id, data) : null;
+}
+
+/** Resolves the last part of a public link. A page with a custom slug no longer answers to its id. */
+export async function getPageByKey(key: string): Promise<StoredPage | null> {
+  if (SLUG_PATTERN.test(key)) {
+    const mapping = await slugRef(key).get();
+    if (mapping.exists) return getPage(mapping.get('pageId'));
+  }
+  const page = await getPage(key);
+  return page && !page.slug ? page : null;
+}
+
+/** Sets or clears (null) the page's custom link name. The previous link stops working. */
+export async function setPageSlug(page: StoredPage, slug: string | null): Promise<StoredPage> {
+  if (slug === page.slug) return page;
+  const db = adminDb();
+  await db.runTransaction(async (tx) => {
+    if (slug) {
+      // A slug may not shadow another page's link, whether that is a slug or a default id.
+      const [mapping, sameId] = await Promise.all([tx.get(slugRef(slug)), tx.get(pageRef(slug))]);
+      if (mapping.exists || (sameId.exists && sameId.id !== page.id)) {
+        throw new HttpError(409, 'That link name is already taken.');
+      }
+      tx.create(slugRef(slug), { pageId: page.id, createdAt: FieldValue.serverTimestamp() });
+    }
+    if (page.slug) tx.delete(slugRef(page.slug));
+    tx.update(pageRef(page.id), { slug, updatedAt: FieldValue.serverTimestamp() });
+  });
+  return (await getPage(page.id))!;
 }
 
 /** Loads a page the caller is allowed to modify, or throws. */
@@ -335,6 +390,7 @@ export async function updatePage(
 }
 
 export async function deletePage(page: StoredPage): Promise<void> {
+  if (page.slug) await slugRef(page.slug).delete();
   await adminDb().recursiveDelete(pageRef(page.id));
 }
 
