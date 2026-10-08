@@ -17,7 +17,7 @@ import {
   FileCode,
   Globe,
   KeyRound,
-  Link2,
+  Pencil,
   Lock,
   RefreshCw,
   Trash2,
@@ -126,6 +126,8 @@ export default function HtmlHosting() {
   const [shownPassword, setShownPassword] = useState<{ id: string; password: string | null } | null>(null);
   const [slugEditId, setSlugEditId] = useState<string | null>(null);
   const [slugDraft, setSlugDraft] = useState('');
+  const [titleEditId, setTitleEditId] = useState<string | null>(null);
+  const [titleDraft, setTitleDraft] = useState('');
   const replaceInput = useRef<HTMLInputElement>(null);
   const replaceTargetId = useRef<string | null>(null);
 
@@ -296,6 +298,13 @@ export default function HtmlHosting() {
     await navigator.clipboard.writeText(pageUrl(page));
     setCopiedId(page.id);
     setTimeout(() => setCopiedId((current) => (current === page.id ? null : current)), 1500);
+  };
+
+  const handleSaveTitle = async (e: React.FormEvent, id: string) => {
+    e.preventDefault();
+    const body = new FormData();
+    body.set('title', titleDraft.trim());
+    if (await patchPage(id, body)) setTitleEditId(null);
   };
 
   const handleSaveSlug = async (e: React.FormEvent, id: string, slug: string) => {
@@ -534,16 +543,83 @@ export default function HtmlHosting() {
                   <React.Fragment key={page.id}>
                     <tr>
                       <td>
-                        <div style={{ fontWeight: 500 }}>{page.title}</div>
-                        <a
-                          href={hostedPagePath(page.urlKey)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-dim mono"
-                          style={{ fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                        >
-                          {hostedPagePath(page.urlKey)} <ExternalLink size={11} />
-                        </a>
+                        {titleEditId === page.id ? (
+                          <form
+                            onSubmit={(e) => handleSaveTitle(e, page.id)}
+                            style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}
+                          >
+                            <input
+                              type="text"
+                              value={titleDraft}
+                              maxLength={120}
+                              required
+                              autoFocus
+                              aria-label="Page name"
+                              onChange={(e) => setTitleDraft(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Escape') setTitleEditId(null);
+                              }}
+                              style={{ height: '30px', maxWidth: '260px' }}
+                            />
+                            <button
+                              type="submit"
+                              className="btn btn-sm btn-primary"
+                              disabled={busyId === page.id || !titleDraft.trim() || titleDraft.trim() === page.title}
+                            >
+                              Save
+                            </button>
+                            <button type="button" className="btn btn-sm btn-ghost" onClick={() => setTitleEditId(null)}>
+                              Cancel
+                            </button>
+                          </form>
+                        ) : (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 500 }}>
+                            {page.title}
+                            {page.canManage && (
+                              <button
+                                type="button"
+                                className="btn btn-ghost"
+                                title="Rename"
+                                aria-label="Rename page"
+                                style={{ height: '22px', padding: '0 4px' }}
+                                onClick={() => {
+                                  setTitleDraft(page.title);
+                                  setTitleEditId(page.id);
+                                }}
+                              >
+                                <Pencil size={12} />
+                              </button>
+                            )}
+                          </div>
+                        )}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <a
+                            href={hostedPagePath(page.urlKey)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-dim mono"
+                            style={{ fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                          >
+                            {hostedPagePath(page.urlKey)} <ExternalLink size={11} />
+                          </a>
+                          {page.canManage && (
+                            <button
+                              type="button"
+                              className="btn btn-ghost"
+                              title="Change the link"
+                              aria-label="Change the link"
+                              style={{ height: '22px', padding: '0 4px' }}
+                              disabled={busyId === page.id}
+                              onClick={() => {
+                                setSlugDraft(page.slug ?? '');
+                                closePasswordEdit();
+                                setSlugEditId(slugEditId === page.id ? null : page.id);
+                              }}
+                            >
+                              <Pencil size={12} />
+                            </button>
+                          )}
+                        </div>
                       </td>
                       <td>
                         {page.hasPassword ? (
@@ -567,19 +643,6 @@ export default function HtmlHosting() {
                           </button>
                           {page.canManage && (
                             <>
-                              <button
-                                type="button"
-                                className="btn btn-icon btn-outline"
-                                title="Change the link"
-                                disabled={busyId === page.id}
-                                onClick={() => {
-                                  setSlugDraft(page.slug ?? '');
-                                  closePasswordEdit();
-                                  setSlugEditId(slugEditId === page.id ? null : page.id);
-                                }}
-                              >
-                                <Link2 size={15} />
-                              </button>
                               <button
                                 type="button"
                                 className="btn btn-icon btn-outline"
