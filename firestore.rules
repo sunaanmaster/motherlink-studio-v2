@@ -123,5 +123,8 @@ service cloud.firestore {
         allow read, write: if false;
       }
     }
+    match /hosted_uploads/{uploadId} {
+      allow read, write: if false;
+    }
   }
 }

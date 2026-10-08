@@ -25,6 +25,7 @@ import { publicBaseUrl } from '@/lib/utils/publicUrl';
 import {
   hostedPagePath,
   MAX_HTML_BYTES,
+  UPLOAD_PART_BYTES,
   MIN_PASSWORD_LENGTH,
   type HostedPage,
 } from '@/lib/html-hosting/types';
@@ -51,6 +52,7 @@ export default function HtmlHosting() {
   const [password, setPassword] = useState('');
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState<number | null>(null);
   const [deployedId, setDeployedId] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
@@ -95,6 +97,57 @@ export default function HtmlHosting() {
     };
   }, [firebaseUser, api]);
 
+  // Gzips the file in the browser and sends it in parts, because a single
+  // request to the server is capped at a few MB. Returns the saved page.
+  const uploadFile = async (
+    picked: File,
+    options: { pageId?: string; title?: string; password?: string }
+  ): Promise<HostedPage> => {
+    if (!/\.html?$/i.test(picked.name)) throw new Error('Only .html files can be hosted.');
+    if (picked.size > MAX_HTML_BYTES) {
+      throw new Error(`File is too large (max ${MAX_HTML_BYTES / 1024 / 1024} MB).`);
+    }
+    if (typeof CompressionStream === 'undefined') {
+      throw new Error('This browser is too old to upload files. Please update it and try again.');
+    }
+
+    setProgress(0);
+    try {
+      const compressed = await new Response(
+        picked.stream().pipeThrough(new CompressionStream('gzip'))
+      ).blob();
+
+      const { uploadId, partCount } = await api('/api/html-hosting/uploads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileName: picked.name,
+          sizeBytes: picked.size,
+          compressedBytes: compressed.size,
+          pageId: options.pageId,
+        }),
+      });
+
+      for (let part = 0; part < partCount; part++) {
+        await api(`/api/html-hosting/uploads/${uploadId}?part=${part}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/octet-stream' },
+          body: compressed.slice(part * UPLOAD_PART_BYTES, (part + 1) * UPLOAD_PART_BYTES),
+        });
+        setProgress(Math.round(((part + 1) / partCount) * 100));
+      }
+
+      const { page } = await api(`/api/html-hosting/uploads/${uploadId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: options.title, password: options.password || undefined }),
+      });
+      return page;
+    } finally {
+      setProgress(null);
+    }
+  };
+
   const pickFile = (picked: File | undefined) => {
     if (!picked) return;
     setError(null);
@@ -117,11 +170,7 @@ export default function HtmlHosting() {
     setUploading(true);
     setError(null);
     try {
-      const body = new FormData();
-      body.set('file', file);
-      body.set('title', title);
-      if (password) body.set('password', password);
-      const { page } = await api('/api/html-hosting', { method: 'POST', body });
+      const page = await uploadFile(file, { title, password });
       setPages((prev) => [page, ...prev]);
       setDeployedId(page.id);
       setFile(null);
@@ -179,9 +228,16 @@ export default function HtmlHosting() {
     const id = replaceTargetId.current;
     e.target.value = '';
     if (!picked || !id) return;
-    const body = new FormData();
-    body.set('file', picked);
-    await patchPage(id, body);
+    setBusyId(id);
+    setError(null);
+    try {
+      const page = await uploadFile(picked, { pageId: id });
+      setPages((prev) => prev.map((p) => (p.id === id ? page : p)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusyId(null);
+    }
   };
 
   const handleDelete = async (page: HostedPage) => {
@@ -205,6 +261,12 @@ export default function HtmlHosting() {
         <div className="alert alert-error">
           <AlertCircle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
           <span>{error}</span>
+        </div>
+      )}
+
+      {busyId && progress !== null && (
+        <div className="alert alert-info">
+          <span>Uploading replacement… {progress}%</span>
         </div>
       )}
 
@@ -304,7 +366,9 @@ export default function HtmlHosting() {
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
               <button type="submit" className="btn btn-primary" disabled={uploading}>
                 <Upload size={16} />
-                <span style={{ marginLeft: 8 }}>{uploading ? 'Deploying…' : 'Deploy'}</span>
+                <span style={{ marginLeft: 8 }}>
+                  {uploading ? (progress === null ? 'Deploying…' : `Uploading ${progress}%`) : 'Deploy'}
+                </span>
               </button>
             </div>
           </div>

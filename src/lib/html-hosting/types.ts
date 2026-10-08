@@ -4,8 +4,12 @@
 
 export const HTML_HOSTING_FEATURE_SLUG = 'html-hosting';
 
-// Vercel rejects function request bodies over 4.5 MB, so stay under it.
-export const MAX_HTML_BYTES = 4 * 1024 * 1024;
+// Largest HTML file that can be hosted (uncompressed).
+export const MAX_HTML_BYTES = 25 * 1024 * 1024;
+
+// Vercel rejects function request bodies over 4.5 MB on every plan, so the
+// browser gzips the file and uploads it in parts of at most this size.
+export const UPLOAD_PART_BYTES = 3 * 1024 * 1024;
 
 export const MIN_PASSWORD_LENGTH = 4;
 export const MAX_PASSWORD_LENGTH = 200;
