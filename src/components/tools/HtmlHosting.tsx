@@ -21,6 +21,7 @@ import {
   Upload,
 } from 'lucide-react';
 import { useAuth } from '@/lib/context/AuthContext';
+import { publicBaseUrl } from '@/lib/utils/publicUrl';
 import {
   hostedPagePath,
   MAX_HTML_BYTES,
@@ -35,7 +36,7 @@ function formatSize(bytes: number): string {
 }
 
 function pageUrl(id: string): string {
-  return `${window.location.origin}${hostedPagePath(id)}`;
+  return `${publicBaseUrl()}${hostedPagePath(id)}`;
 }
 
 export default function HtmlHosting() {

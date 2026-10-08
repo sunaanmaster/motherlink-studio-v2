@@ -10,6 +10,7 @@ import { useAuth } from '@/lib/context/AuthContext';
 import { canManageInvitations } from '@/lib/utils/permissions';
 import { InvitationStatus, RoleSlug } from '@/lib/types';
 import { COMPANY_EMAIL_DOMAIN, isCompanyEmail } from '@/lib/utils/companyDomain';
+import { publicBaseUrl } from '@/lib/utils/publicUrl';
 import type { Invitation, Role, Feature } from '@/lib/types';
 import { 
   Mail, 
@@ -145,7 +146,7 @@ export default function InvitationsPage() {
   };
 
   const copyInviteLink = (token: string) => {
-    const url = `${window.location.origin}/signup?token=${token}`;
+    const url = `${publicBaseUrl()}/signup?token=${token}`;
     navigator.clipboard.writeText(url);
     alert('Link copied to clipboard!');
   };

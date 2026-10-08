@@ -10,6 +10,7 @@ import { getInvitationByToken, createUser, updateInvitation } from '@/lib/fireba
 import { signupWithEmail } from '@/lib/firebase/auth';
 import { InvitationStatus, UserStatus } from '@/lib/types';
 import type { Invitation } from '@/lib/types';
+import { COMPANY_EMAIL_DOMAIN, isCompanyEmail } from '@/lib/utils/companyDomain';
 import { User, Lock, Mail, AlertCircle } from 'lucide-react';
 import GoogleSignInButton, { AuthDivider } from '@/components/auth/GoogleSignInButton';
 
@@ -52,6 +53,8 @@ function SignupForm() {
         setError(`This invitation has already been ${inv.status}.`);
       } else if (new Date() > inv.expiresAt) {
         setError('This invitation has expired.');
+      } else if (!isCompanyEmail(inv.email)) {
+        setError(`Only @${COMPANY_EMAIL_DOMAIN} email addresses can join. Ask an admin for a new invitation.`);
       } else {
         setInvitation(inv);
       }
