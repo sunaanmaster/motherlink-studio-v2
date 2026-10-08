@@ -65,8 +65,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUserProfile(profile);
           
           if (profile) {
-            // Update last login timestamp
-            await updateLastLogin(user.uid);
+            // Update last login timestamp. Never let this block sign-in: if the
+            // write is refused, the role below must still load.
+            updateLastLogin(user.uid).catch((err) => console.warn('Could not record last login:', err));
             
             // Fetch role details
             const role = await getRoleById(profile.roleId);

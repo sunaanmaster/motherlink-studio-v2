@@ -9,7 +9,6 @@ import { getInvitations, createInvitation, getRoles, getFeatures, updateInvitati
 import { useAuth } from '@/lib/context/AuthContext';
 import { canManageInvitations } from '@/lib/utils/permissions';
 import { InvitationStatus, RoleSlug } from '@/lib/types';
-import { COMPANY_EMAIL_DOMAIN, isCompanyEmail } from '@/lib/utils/companyDomain';
 import { publicBaseUrl } from '@/lib/utils/publicUrl';
 import type { Invitation, Role, Feature } from '@/lib/types';
 import { 
@@ -67,11 +66,6 @@ export default function InvitationsPage() {
     e.preventDefault();
     if (!userProfile) return;
     
-    if (!isCompanyEmail(email)) {
-      setFormError(`Only @${COMPANY_EMAIL_DOMAIN} email addresses can be invited.`);
-      return;
-    }
-
     setSubmitting(true);
     setFormError(null);
 

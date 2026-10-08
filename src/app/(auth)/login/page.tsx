@@ -174,7 +174,7 @@ function LoginForm() {
       >
         Don&apos;t have an account?{' '}
 <span style={{ color: 'var(--text-dim)' }}>
-          Sign in with your @motherlink.io Google account.
+          Use your @motherlink.io Google account, or ask an admin for an invitation.
         </span>
       </div>
     </div>
