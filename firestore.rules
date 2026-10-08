@@ -32,7 +32,7 @@ service cloud.firestore {
       allow create: if isSignedIn(); // signup creates own profile post-auth
       allow update: if isSuperAdmin()
         || (isAdmin() && resource.data.roleSlug != 'super_admin')
-        || (isOwner(uid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'avatarUrl', 'updatedAt']));
+        || (isOwner(uid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'avatarUrl', 'updatedAt', 'lastLoginAt']));
     }
 
     // D2: roles
