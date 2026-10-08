@@ -4,6 +4,8 @@
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  GoogleAuthProvider,
+  signInWithPopup,
   signOut,
   sendPasswordResetEmail,
   updateProfile,
@@ -19,6 +21,13 @@ export async function loginWithEmail(email: string, password: string): Promise<U
 export async function signupWithEmail(email: string, password: string, displayName: string): Promise<User> {
   const result = await createUserWithEmailAndPassword(auth, email, password);
   await updateProfile(result.user, { displayName });
+  return result.user;
+}
+
+export async function loginWithGoogle(): Promise<User> {
+  const provider = new GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: 'select_account' });
+  const result = await signInWithPopup(auth, provider);
   return result.user;
 }
 

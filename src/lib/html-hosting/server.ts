@@ -11,10 +11,11 @@
 import { createHmac, randomBytes, scryptSync, timingSafeEqual } from 'crypto';
 import { gunzipSync, gzipSync } from 'zlib';
 import { FieldValue, Timestamp, type DocumentData } from 'firebase-admin/firestore';
-import { adminAuth, adminDb, isAdminConfigured } from '@/lib/firebase/admin';
+import { adminDb } from '@/lib/firebase/admin';
+import { errorResponse, HttpError, requireActiveUser } from '@/lib/server/auth';
 import { hasFeatureAccess } from '@/lib/utils/permissions';
-import { RoleSlug, UserStatus, LogSeverity } from '@/lib/types';
-import type { Feature, Role, UserProfile } from '@/lib/types';
+import { RoleSlug, LogSeverity } from '@/lib/types';
+import type { Feature } from '@/lib/types';
 import {
   HTML_HOSTING_FEATURE_SLUG,
   MAX_HTML_BYTES,
@@ -28,25 +29,7 @@ const CHUNK_BYTES = 800 * 1024;
 const UNLOCK_TTL_SECONDS = 7 * 24 * 60 * 60;
 const ID_PATTERN = /^[A-Za-z0-9_-]{8,32}$/;
 
-export class HttpError extends Error {
-  constructor(public status: number, message: string) {
-    super(message);
-  }
-}
-
-export function errorResponse(err: unknown): Response {
-  if (err instanceof HttpError) {
-    return Response.json({ error: err.message }, { status: err.status });
-  }
-  console.error('html-hosting error:', err);
-  return Response.json({ error: 'Something went wrong.' }, { status: 500 });
-}
-
-export function assertConfigured(): void {
-  if (!isAdminConfigured()) {
-    throw new HttpError(503, 'FIREBASE_SERVICE_ACCOUNT not configured.');
-  }
-}
+export { HttpError, errorResponse };
 
 // ---- Caller auth ----
 
@@ -60,33 +43,18 @@ export interface Caller {
 
 /** Verifies the Firebase ID token and that the user may use this tool. */
 export async function requireCaller(req: Request): Promise<Caller> {
-  assertConfigured();
+  const { uid, user, role } = await requireActiveUser(req);
 
-  const match = /^Bearer (.+)$/.exec(req.headers.get('authorization') ?? '');
-  if (!match) throw new HttpError(401, 'Not signed in.');
-
-  let uid: string;
-  try {
-    uid = (await adminAuth().verifyIdToken(match[1])).uid;
-  } catch {
-    throw new HttpError(401, 'Session expired. Sign in again.');
-  }
-
-  const db = adminDb();
-  const user = (await db.collection('users').doc(uid).get()).data() as UserProfile | undefined;
-  if (!user || user.status !== UserStatus.ACTIVE) throw new HttpError(403, 'Access denied.');
-
-  const [roleSnap, featureSnap] = await Promise.all([
-    db.collection('roles').doc(user.roleId).get(),
-    db.collection('features').where('slug', '==', HTML_HOSTING_FEATURE_SLUG).limit(1).get(),
-  ]);
-  const role = roleSnap.data() as Role | undefined;
+  const featureSnap = await adminDb()
+    .collection('features')
+    .where('slug', '==', HTML_HOSTING_FEATURE_SLUG)
+    .limit(1)
+    .get();
   const featureDoc = featureSnap.docs[0];
-  if (!role || !featureDoc) throw new HttpError(403, 'Access denied.');
+  if (!featureDoc) throw new HttpError(403, 'Access denied.');
 
   const feature = { ...featureDoc.data(), featureId: featureDoc.id } as Feature;
-  const profile = { ...user, assignedFeatureIds: user.assignedFeatureIds ?? [] };
-  if (!hasFeatureAccess(profile, role, feature, null)) throw new HttpError(403, 'Access denied.');
+  if (!hasFeatureAccess(user, role, feature, null)) throw new HttpError(403, 'Access denied.');
 
   return {
     uid,
