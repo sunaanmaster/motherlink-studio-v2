@@ -19,7 +19,8 @@ import {
   UserX, 
   CheckCircle,
   Clock,
-  Trash2
+  Trash2,
+  SlidersHorizontal
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
@@ -33,6 +34,9 @@ export default function UserManagementPage() {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [deletingUid, setDeletingUid] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [savingUid, setSavingUid] = useState<string | null>(null);
+  const [accessEditUid, setAccessEditUid] = useState<string | null>(null);
+  const [accessDraft, setAccessDraft] = useState<string[]>([]);
   const router = useRouter();
 
   useEffect(() => {
@@ -64,6 +68,50 @@ export default function UserManagementPage() {
       console.error('Failed to update user status:', error);
     }
   };
+
+  // Role and tool access changes go through the server, which enforces who may change whom.
+  const patchUser = async (uid: string, changes: { roleSlug?: RoleSlug; assignedFeatureIds?: string[] }) => {
+    if (!firebaseUser) return false;
+    setSavingUid(uid);
+    setActionError(null);
+    try {
+      const res = await fetch(`/api/admin/users/${uid}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${await firebaseUser.getIdToken()}`,
+        },
+        body: JSON.stringify(changes),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+      setUsers((prev) => prev.map((u) => (u.uid === uid ? { ...u, ...data.user } : u)));
+      return true;
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Failed to update user.');
+      return false;
+    } finally {
+      setSavingUid(null);
+    }
+  };
+
+  const handleRoleChange = async (user: UserProfile, roleSlug: RoleSlug) => {
+    const roleName = roles.find((r) => r.slug === roleSlug)?.name || roleSlug;
+    if (!confirm(`Change ${user.displayName || user.email} to ${roleName}?`)) return;
+    await patchUser(user.uid, { roleSlug });
+  };
+
+  const openAccessEdit = (user: UserProfile) => {
+    setAccessDraft(user.assignedFeatureIds ?? []);
+    setAccessEditUid(accessEditUid === user.uid ? null : user.uid);
+  };
+
+  const handleSaveAccess = async (uid: string) => {
+    if (await patchUser(uid, { assignedFeatureIds: accessDraft })) setAccessEditUid(null);
+  };
+
+  const isSuperAdminCaller = userRole?.slug === RoleSlug.SUPER_ADMIN;
+  const toolFeatures = features.filter((f) => f.category === 'tool');
 
   const handleDelete = async (user: UserProfile) => {
     if (!firebaseUser) return;
@@ -163,8 +211,12 @@ export default function UserManagementPage() {
             <tbody>
               {filteredUsers.map((user) => {
                 const userRoleData = roles.find(r => r.slug === user.roleSlug);
+                // Whether the signed-in admin may change this user's role or tool access.
+                const canEdit = user.roleSlug !== RoleSlug.SUPER_ADMIN || isSuperAdminCaller;
+                const hasAllTools = !!userRoleData?.hasAllFeatureAccess;
                 return (
-                  <tr key={user.uid}>
+                  <React.Fragment key={user.uid}>
+                  <tr>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                         <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.875rem', fontWeight: 700 }}>
@@ -179,7 +231,23 @@ export default function UserManagementPage() {
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <Shield size={14} className="text-primary-light" />
-                        <span style={{ fontSize: '0.875rem' }}>{userRoleData?.name || user.roleSlug}</span>
+                        {canEdit && user.uid !== firebaseUser?.uid ? (
+                          <select
+                            value={user.roleSlug}
+                            title="Change role"
+                            disabled={savingUid === user.uid}
+                            onChange={(e) => handleRoleChange(user, e.target.value as RoleSlug)}
+                            style={{ width: 'auto', minWidth: '130px', height: '32px', fontSize: '0.875rem' }}
+                          >
+                            {roles
+                              .filter((r) => r.slug !== RoleSlug.SUPER_ADMIN || isSuperAdminCaller)
+                              .map((r) => (
+                                <option key={r.roleId} value={r.slug}>{r.name}</option>
+                              ))}
+                          </select>
+                        ) : (
+                          <span style={{ fontSize: '0.875rem' }}>{userRoleData?.name || user.roleSlug}</span>
+                        )}
                       </div>
                     </td>
                     <td>
@@ -224,6 +292,15 @@ export default function UserManagementPage() {
                         )}
                         <button
                           className="btn-outline"
+                          style={{ padding: '6px' }}
+                          title={hasAllTools ? 'This role already has access to every tool' : 'Edit tool access'}
+                          onClick={() => openAccessEdit(user)}
+                          disabled={!canEdit || hasAllTools || savingUid === user.uid}
+                        >
+                          <SlidersHorizontal size={18} />
+                        </button>
+                        <button
+                          className="btn-outline"
                           style={{ padding: '6px', color: 'var(--error)' }}
                           title="Delete user permanently"
                           onClick={() => handleDelete(user)}
@@ -238,6 +315,45 @@ export default function UserManagementPage() {
                       </div>
                     </td>
                   </tr>
+                  {accessEditUid === user.uid && !hasAllTools && (
+                    <tr>
+                      <td colSpan={6}>
+                        <div className="label" style={{ marginBottom: '10px' }}>
+                          Tool access for {user.displayName || user.email}
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '12px', marginBottom: '14px' }}>
+                          {toolFeatures.map((f) => (
+                            <label key={f.featureId} style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.875rem', cursor: 'pointer' }}>
+                              <input
+                                type="checkbox"
+                                style={{ width: '18px', height: '18px' }}
+                                checked={accessDraft.includes(f.featureId)}
+                                onChange={(e) =>
+                                  setAccessDraft(
+                                    e.target.checked
+                                      ? [...accessDraft, f.featureId]
+                                      : accessDraft.filter((id) => id !== f.featureId)
+                                  )
+                                }
+                              />
+                              {f.name}
+                            </label>
+                          ))}
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                          <button className="btn btn-ghost" onClick={() => setAccessEditUid(null)}>Cancel</button>
+                          <button
+                            className="btn btn-primary"
+                            onClick={() => handleSaveAccess(user.uid)}
+                            disabled={savingUid === user.uid}
+                          >
+                            {savingUid === user.uid ? 'Saving…' : 'Save access'}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </React.Fragment>
                 );
               })}
             </tbody>
