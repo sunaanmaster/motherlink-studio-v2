@@ -12,6 +12,8 @@ import {
   Check,
   Copy,
   ExternalLink,
+  Eye,
+  EyeOff,
   FileCode,
   Globe,
   KeyRound,
@@ -61,6 +63,8 @@ export default function HtmlHosting() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [passwordEditId, setPasswordEditId] = useState<string | null>(null);
   const [newPassword, setNewPassword] = useState('');
+  // The current password of the page being edited, once the user asks to see it.
+  const [shownPassword, setShownPassword] = useState<{ id: string; password: string | null } | null>(null);
   const replaceInput = useRef<HTMLInputElement>(null);
   const replaceTargetId = useRef<string | null>(null);
 
@@ -208,6 +212,21 @@ export default function HtmlHosting() {
   const closePasswordEdit = () => {
     setPasswordEditId(null);
     setNewPassword('');
+    setShownPassword(null);
+  };
+
+  const toggleShownPassword = async (id: string) => {
+    if (shownPassword?.id === id) {
+      setShownPassword(null);
+      return;
+    }
+    setError(null);
+    try {
+      const { password } = await api(`/api/html-hosting/${id}/password`);
+      setShownPassword({ id, password });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
   };
 
   const handleSetPassword = async (e: React.FormEvent, id: string) => {
@@ -443,6 +462,7 @@ export default function HtmlHosting() {
                                 disabled={busyId === page.id}
                                 onClick={() => {
                                   setNewPassword('');
+                                  setShownPassword(null);
                                   setPasswordEditId(passwordEditId === page.id ? null : page.id);
                                 }}
                               >
@@ -479,8 +499,30 @@ export default function HtmlHosting() {
                         <td colSpan={6}>
                           <form
                             onSubmit={(e) => handleSetPassword(e, page.id)}
-                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}
+                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px', flexWrap: 'wrap' }}
                           >
+                            {page.hasPassword && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginRight: 'auto' }}>
+                                <span className="text-dim" style={{ fontSize: '0.8125rem' }}>Current password:</span>
+                                {shownPassword?.id !== page.id ? (
+                                  <span className="mono">••••••••</span>
+                                ) : shownPassword.password === null ? (
+                                  <span className="text-dim" style={{ fontSize: '0.8125rem' }}>
+                                    can&apos;t be shown. Set a new one to see it later.
+                                  </span>
+                                ) : (
+                                  <span className="mono" style={{ userSelect: 'all' }}>{shownPassword.password}</span>
+                                )}
+                                <button
+                                  type="button"
+                                  className="btn btn-icon btn-outline"
+                                  title={shownPassword?.id === page.id ? 'Hide password' : 'Show password'}
+                                  onClick={() => toggleShownPassword(page.id)}
+                                >
+                                  {shownPassword?.id === page.id ? <EyeOff size={15} /> : <Eye size={15} />}
+                                </button>
+                              </div>
+                            )}
                             <input
                               type="text"
                               value={newPassword}

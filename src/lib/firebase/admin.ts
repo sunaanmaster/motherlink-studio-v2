@@ -9,6 +9,7 @@
 //      pointing at a key file locally, or the ambient identity on
 //      Firebase App Hosting / Cloud Run.
 // ============================================================
+import { readFileSync } from 'fs';
 import { applicationDefault, cert, getApps, initializeApp, type App } from 'firebase-admin/app';
 import { getAuth, type Auth } from 'firebase-admin/auth';
 import { getFirestore, type Firestore } from 'firebase-admin/firestore';
@@ -21,6 +22,24 @@ export function isAdminConfigured(): boolean {
       process.env.GOOGLE_APPLICATION_CREDENTIALS ||
       process.env.K_SERVICE // Cloud Run / App Hosting: ambient credentials
   );
+}
+
+function serviceAccountJson(): { private_key?: string } | null {
+  try {
+    const raw = process.env.FIREBASE_SERVICE_ACCOUNT?.trim();
+    if (raw) {
+      return JSON.parse(raw.startsWith('{') ? raw : Buffer.from(raw, 'base64').toString('utf8'));
+    }
+    const file = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+    return file ? JSON.parse(readFileSync(file, 'utf8')) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The service account's private key, for deriving other server-side keys. Null on ambient credentials. */
+export function serviceAccountPrivateKey(): string | null {
+  return serviceAccountJson()?.private_key ?? null;
 }
 
 function loadCredential() {

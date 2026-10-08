@@ -13,11 +13,19 @@
 // upload writes its chunks under its own content id, and the page only
 // switches to them once the whole file has arrived and been verified.
 // ============================================================
-import { createHmac, randomBytes, scryptSync, timingSafeEqual } from 'crypto';
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHmac,
+  hkdfSync,
+  randomBytes,
+  scryptSync,
+  timingSafeEqual,
+} from 'crypto';
 import { Readable } from 'stream';
 import { createGunzip, gunzipSync } from 'zlib';
 import { FieldPath, FieldValue, Timestamp, type DocumentData } from 'firebase-admin/firestore';
-import { adminDb } from '@/lib/firebase/admin';
+import { adminDb, serviceAccountPrivateKey } from '@/lib/firebase/admin';
 import { errorResponse, HttpError, requireActiveUser } from '@/lib/server/auth';
 import { hasFeatureAccess } from '@/lib/utils/permissions';
 import { RoleSlug, LogSeverity } from '@/lib/types';
@@ -100,16 +108,58 @@ export function validatePassword(raw: unknown): string {
 interface PasswordFields {
   passwordSalt: string | null;
   passwordHash: string | null;
+  /** The password encrypted for later viewing by the owner or an admin; null if unavailable. */
+  passwordEnc: string | null;
 }
 
 function hashPassword(password: string, salt: string): Buffer {
   return scryptSync(password, Buffer.from(salt, 'hex'), 32);
 }
 
+// Visitors are checked against the hash. Separately, the password is kept
+// encrypted (AES-256-GCM) so whoever manages the page can look it up later.
+// The key comes from HTML_HOSTING_SECRET, or else is derived from the service
+// account key; if that key is rotated, older passwords can no longer be shown
+// (they still work) until they are set again.
+function viewKey(): Buffer | null {
+  const secret = process.env.HTML_HOSTING_SECRET || serviceAccountPrivateKey();
+  if (!secret) return null;
+  return Buffer.from(hkdfSync('sha256', secret, '', 'html-hosting-password-view', 32));
+}
+
+function encryptPassword(password: string): string | null {
+  const key = viewKey();
+  if (!key) return null;
+  const iv = randomBytes(12);
+  const cipher = createCipheriv('aes-256-gcm', key, iv);
+  const data = Buffer.concat([cipher.update(password, 'utf8'), cipher.final()]);
+  return ['v1', iv, data, cipher.getAuthTag()]
+    .map((part) => (typeof part === 'string' ? part : part.toString('base64url')))
+    .join('.');
+}
+
+/** The page's password in plain text, or null if it has none or it can't be recovered. */
+export function viewPassword(page: StoredPage): string | null {
+  const key = viewKey();
+  const [version, iv, data, tag] = (page.passwordEnc ?? '').split('.');
+  if (!key || version !== 'v1' || !iv || !data || !tag) return null;
+  try {
+    const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(iv, 'base64url'));
+    decipher.setAuthTag(Buffer.from(tag, 'base64url'));
+    return Buffer.concat([decipher.update(Buffer.from(data, 'base64url')), decipher.final()]).toString('utf8');
+  } catch {
+    return null;
+  }
+}
+
 export function passwordFields(password: string | null): PasswordFields {
-  if (!password) return { passwordSalt: null, passwordHash: null };
+  if (!password) return { passwordSalt: null, passwordHash: null, passwordEnc: null };
   const salt = randomBytes(16).toString('hex');
-  return { passwordSalt: salt, passwordHash: hashPassword(password, salt).toString('hex') };
+  return {
+    passwordSalt: salt,
+    passwordHash: hashPassword(password, salt).toString('hex'),
+    passwordEnc: encryptPassword(password),
+  };
 }
 
 export function checkPassword(page: StoredPage, password: string): boolean {
@@ -189,6 +239,7 @@ function fromDoc(id: string, data: DocumentData): StoredPage {
     ownerName: data.ownerName,
     passwordSalt: data.passwordSalt ?? null,
     passwordHash: data.passwordHash ?? null,
+    passwordEnc: data.passwordEnc ?? null,
     createdAt: toDate(data.createdAt),
     updatedAt: toDate(data.updatedAt),
   };
