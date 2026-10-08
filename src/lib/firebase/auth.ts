@@ -6,6 +6,11 @@ import {
   createUserWithEmailAndPassword,
   GoogleAuthProvider,
   signInWithPopup,
+  EmailAuthProvider,
+  linkWithCredential,
+  reauthenticateWithCredential,
+  reauthenticateWithPopup,
+  updatePassword,
   signOut,
   sendPasswordResetEmail,
   updateProfile,
@@ -29,6 +34,36 @@ export async function loginWithGoogle(): Promise<User> {
   provider.setCustomParameters({ prompt: 'select_account' });
   const result = await signInWithPopup(auth, provider);
   return result.user;
+}
+
+export function hasPasswordLogin(user: User): boolean {
+  return user.providerData.some((p) => p.providerId === 'password');
+}
+
+/**
+ * Sets a password on the signed-in account, or changes the existing one.
+ * Accounts that already have a password must supply the current one.
+ * Google-only accounts are asked to confirm with Google if their session
+ * is too old for Firebase to accept the change.
+ */
+export async function setAccountPassword(newPassword: string, currentPassword?: string): Promise<void> {
+  const user = auth.currentUser;
+  if (!user || !user.email) throw new Error('Not signed in.');
+
+  if (hasPasswordLogin(user)) {
+    await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, currentPassword ?? ''));
+    await updatePassword(user, newPassword);
+  } else {
+    const credential = EmailAuthProvider.credential(user.email, newPassword);
+    try {
+      await linkWithCredential(user, credential);
+    } catch (err) {
+      if ((err as { code?: string }).code !== 'auth/requires-recent-login') throw err;
+      await reauthenticateWithPopup(user, new GoogleAuthProvider());
+      await linkWithCredential(user, credential);
+    }
+  }
+  await user.reload();
 }
 
 export async function logoutUser(): Promise<void> {

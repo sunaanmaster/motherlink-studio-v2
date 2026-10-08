@@ -8,6 +8,7 @@ import React, { useState } from 'react';
 import { useAuth } from '@/lib/context/AuthContext';
 import { updateUser } from '@/lib/firebase/firestore';
 import { User, Mail, Shield, Zap, Camera, Save } from 'lucide-react';
+import PasswordCard from '@/components/profile/PasswordCard';
 
 export default function ProfilePage() {
   const { userProfile, userRole, loading } = useAuth();
@@ -142,6 +143,8 @@ export default function ProfilePage() {
               </button>
             </div>
           </form>
+
+          <PasswordCard />
 
           <div className="card">
             <h3 style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '8px' }}>
