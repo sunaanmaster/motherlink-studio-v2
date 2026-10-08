@@ -5,7 +5,7 @@
 //            title           rename
 //            password        set / change the password
 //            removePassword  "1" → make the page public
-//            file            replace the HTML (link stays the same)
+//          (Replacing the HTML goes through /api/html-hosting/uploads.)
 // DELETE — take the page down.
 //
 // Owner or admin only.
@@ -20,7 +20,6 @@ import {
   getManagedPage,
   HttpError,
   logHostingActivity,
-  readHtmlFile,
   requireCaller,
   toHostedPage,
   updatePage,
@@ -50,11 +49,6 @@ export async function PATCH(req: NextRequest, { params }: Context) {
     const password = form.get('password');
     if (form.get('removePassword') === '1') changes.password = null;
     else if (password) changes.password = validatePassword(password);
-
-    const file = form.get('file');
-    if (file instanceof File) {
-      changes.file = { html: await readHtmlFile(file), fileName: file.name };
-    }
 
     if (Object.keys(changes).length === 0) throw new HttpError(400, 'Nothing to update.');
 

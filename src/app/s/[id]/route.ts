@@ -16,7 +16,7 @@ import {
   checkPassword,
   createUnlockCookie,
   getPage,
-  getPageHtml,
+  getPageHtmlStream,
   isUnlocked,
   unlockCookieName,
 } from '@/lib/html-hosting/server';
@@ -112,8 +112,8 @@ export async function GET(req: NextRequest, { params }: Context) {
     return passwordPrompt(false);
   }
 
-  const html = await getPageHtml(page);
-  return new Response(new Uint8Array(html), {
+  // Streamed, so the response is not bound by the 4.5 MB function payload limit.
+  return new Response(await getPageHtmlStream(page), {
     headers: { ...BASE_HEADERS, 'Content-Security-Policy': PAGE_CSP },
   });
 }
