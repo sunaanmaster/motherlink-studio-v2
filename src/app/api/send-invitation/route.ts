@@ -1,5 +1,6 @@
 import { Resend } from 'resend';
 import { NextRequest, NextResponse } from 'next/server';
+import { serverPublicBaseUrl } from '@/lib/utils/publicUrl';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -10,7 +11,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
   }
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://motherlink.io';
+  const baseUrl = serverPublicBaseUrl();
   const inviteUrl = `${baseUrl}/signup?token=${token}`;
 
   const { error } = await resend.emails.send({
