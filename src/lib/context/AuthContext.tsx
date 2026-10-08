@@ -10,7 +10,12 @@ import { auth } from '@/lib/firebase/config';
 import { getUser, updateLastLogin } from '@/lib/firebase/firestore';
 import { getRoleById } from '@/lib/firebase/firestore';
 import type { UserProfile, Role, AuthContextType } from '@/lib/types';
-import { loginWithEmail, logoutUser, resetPassword as firebaseResetPassword } from '@/lib/firebase/auth';
+import {
+  loginWithEmail,
+  loginWithGoogle as firebaseLoginWithGoogle,
+  logoutUser,
+  resetPassword as firebaseResetPassword,
+} from '@/lib/firebase/auth';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -19,6 +24,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [userRole, setUserRole] = useState<Role | null>(null);
   const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -27,7 +33,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (user) {
         try {
           // Fetch user profile from Firestore
-          const profile = await getUser(user.uid);
+          let profile = await getUser(user.uid);
+
+          // First Google sign-in: the server creates the profile (from an
+          // invitation or the company domain) or rejects the account.
+          if (!profile && user.providerData.some((p) => p.providerId === 'google.com')) {
+            const res = await fetch('/api/auth/google', {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${await user.getIdToken()}` },
+            });
+            if (!res.ok) {
+              const data = await res.json().catch(() => ({}));
+              setAuthError(data.error || 'Google sign-in failed. Please try again.');
+              await logoutUser();
+              return;
+            }
+            profile = await getUser(user.uid);
+          }
           setUserProfile(profile);
           
           if (profile) {
@@ -56,6 +78,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await loginWithEmail(email, password);
   };
 
+  const loginWithGoogle = async () => {
+    setAuthError(null);
+    await firebaseLoginWithGoogle();
+  };
+
   const logout = async () => {
     await logoutUser();
   };
@@ -71,7 +98,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         userProfile,
         userRole,
         loading,
+        authError,
+        clearAuthError: () => setAuthError(null),
         login,
+        loginWithGoogle,
         logout,
         resetPassword,
       }}

@@ -11,6 +11,7 @@ import { signupWithEmail } from '@/lib/firebase/auth';
 import { InvitationStatus, UserStatus } from '@/lib/types';
 import type { Invitation } from '@/lib/types';
 import { User, Lock, Mail, AlertCircle } from 'lucide-react';
+import GoogleSignInButton, { AuthDivider } from '@/components/auth/GoogleSignInButton';
 
 function BrandWordmark({ width = 160 }: { width?: number }) {
   return (
@@ -136,6 +137,9 @@ function SignupForm() {
           >
             Complete your registration to access the platform
           </p>
+
+          <GoogleSignInButton />
+          <AuthDivider />
 
           <form onSubmit={handleSignup}>
             <div className="input-group">

@@ -14,23 +14,25 @@ import {
   Users, 
   Search, 
   Filter, 
-  MoreHorizontal, 
   UserPlus, 
   Shield, 
   UserX, 
   CheckCircle,
-  Clock
+  Clock,
+  Trash2
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 export default function UserManagementPage() {
-  const { userRole, loading: authLoading } = useAuth();
+  const { firebaseUser, userRole, loading: authLoading } = useAuth();
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [features, setFeatures] = useState<Feature[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [deletingUid, setDeletingUid] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -63,6 +65,32 @@ export default function UserManagementPage() {
     }
   };
 
+  const handleDelete = async (user: UserProfile) => {
+    if (!firebaseUser) return;
+    const confirmed = confirm(
+      `Permanently delete ${user.displayName || user.email}?\n\n` +
+      `This removes their login and profile and cannot be undone. ` +
+      `To block access without deleting, suspend the user instead.`
+    );
+    if (!confirmed) return;
+
+    setDeletingUid(user.uid);
+    setActionError(null);
+    try {
+      const res = await fetch(`/api/admin/users/${user.uid}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${await firebaseUser.getIdToken()}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+      setUsers((prev) => prev.filter((u) => u.uid !== user.uid));
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Failed to delete user.');
+    } finally {
+      setDeletingUid(null);
+    }
+  };
+
   const filteredUsers = users.filter(u => {
     const matchesSearch = u.displayName.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           u.email.toLowerCase().includes(searchTerm.toLowerCase());
@@ -84,6 +112,12 @@ export default function UserManagementPage() {
           Invite New User
         </button>
       </div>
+
+      {actionError && (
+        <div className="alert alert-error" style={{ marginBottom: '16px' }}>
+          <span>{actionError}</span>
+        </div>
+      )}
 
       <div className="card" style={{ marginBottom: '32px', padding: '16px 24px' }}>
         <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
@@ -188,8 +222,18 @@ export default function UserManagementPage() {
                             <UserX size={18} />
                           </button>
                         )}
-                        <button className="btn-outline" style={{ padding: '6px' }}>
-                          <MoreHorizontal size={18} />
+                        <button
+                          className="btn-outline"
+                          style={{ padding: '6px', color: 'var(--error)' }}
+                          title="Delete user permanently"
+                          onClick={() => handleDelete(user)}
+                          disabled={
+                            deletingUid === user.uid ||
+                            user.uid === firebaseUser?.uid ||
+                            (user.roleSlug === RoleSlug.SUPER_ADMIN && userRole?.slug !== RoleSlug.SUPER_ADMIN)
+                          }
+                        >
+                          <Trash2 size={18} />
                         </button>
                       </div>
                     </td>

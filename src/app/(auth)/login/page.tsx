@@ -9,6 +9,7 @@ import { useAuth } from '@/lib/context/AuthContext';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Lock, Mail, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
+import GoogleSignInButton, { AuthDivider } from '@/components/auth/GoogleSignInButton';
 
 function BrandWordmark({ width = 160 }: { width?: number }) {
   return (
@@ -27,7 +28,7 @@ function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const { login } = useAuth();
+  const { login, clearAuthError } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -37,6 +38,7 @@ function LoginForm() {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    clearAuthError();
 
     try {
       await login(email, password);
@@ -82,6 +84,9 @@ function LoginForm() {
           <span>{error}</span>
         </div>
       )}
+
+      <GoogleSignInButton />
+      <AuthDivider />
 
       <form onSubmit={handleSubmit}>
         <div className="input-group">
@@ -168,7 +173,9 @@ function LoginForm() {
         }}
       >
         Don&apos;t have an account?{' '}
-        <span style={{ color: 'var(--text-dim)' }}>Contact an admin for an invitation.</span>
+        <span style={{ color: 'var(--text-dim)' }}>
+          Use your @motherlink.io Google account, or ask an admin for an invitation.
+        </span>
       </div>
     </div>
   );

@@ -218,7 +218,11 @@ export interface AuthContextType {
   userProfile: UserProfile | null;
   userRole: Role | null;
   loading: boolean;
+  /** Why the last sign-in was rejected after authenticating (e.g. no access). */
+  authError: string | null;
+  clearAuthError: () => void;
   login: (email: string, password: string) => Promise<void>;
+  loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
 }
