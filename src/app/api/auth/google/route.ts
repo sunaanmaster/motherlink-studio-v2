@@ -2,11 +2,10 @@
 // POST /api/auth/google
 //
 // Called by the client right after a Google sign-in when the user
-// has no profile yet. Creates the profile server-side:
-//   - from a pending invitation for that email (role + tools from
-//     the invitation), or
-//   - as an Employee if the email is on the company domain.
-// Anyone else is rejected and their just-created auth account removed.
+// has no profile yet. Google sign-in is limited to the company email
+// domain: those accounts get a profile created server-side (role and
+// tools from a pending invitation if there is one, otherwise Employee).
+// Any other account is rejected and its just-created auth record removed.
 //
 // Requires `Authorization: Bearer <Firebase ID token>`.
 // ============================================================
@@ -15,10 +14,9 @@ import { NextRequest } from 'next/server';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { adminAuth, adminDb } from '@/lib/firebase/admin';
 import { errorResponse, HttpError, verifyRequest } from '@/lib/server/auth';
+import { HTML_HOSTING_FEATURE_SLUG } from '@/lib/html-hosting/types';
+import { COMPANY_EMAIL_DOMAIN, isCompanyEmail } from '@/lib/utils/companyDomain';
 import { InvitationStatus, LogAction, LogSeverity, RoleSlug, UserStatus } from '@/lib/types';
-
-// Google accounts on this domain may join without an invitation.
-const SIGNUP_DOMAIN = (process.env.SIGNUP_ALLOWED_DOMAIN || 'motherlink.io').toLowerCase();
 
 async function findPendingInvitation(email: string, rawEmail: string) {
   const snap = await adminDb()
@@ -42,22 +40,22 @@ export async function POST(req: NextRequest) {
       throw new HttpError(403, 'Your Google account email is not verified.');
     }
 
+    const email = token.email.toLowerCase();
     const db = adminDb();
     const userRef = db.collection('users').doc(token.uid);
-    if ((await userRef.get()).exists) return Response.json({ status: 'existing' });
+    const hasProfile = (await userRef.get()).exists;
 
-    const email = token.email.toLowerCase();
-    const invitation = await findPendingInvitation(email, token.email);
-    const onCompanyDomain = email.endsWith(`@${SIGNUP_DOMAIN}`);
-
-    if (!invitation && !onCompanyDomain) {
+    if (!isCompanyEmail(email)) {
       // Don't leave a stray login behind for someone who isn't allowed in.
-      await adminAuth().deleteUser(token.uid).catch(() => {});
+      if (!hasProfile) await adminAuth().deleteUser(token.uid).catch(() => {});
       throw new HttpError(
         403,
-        `${token.email} doesn't have access. Sign in with your @${SIGNUP_DOMAIN} Google account, or ask an admin for an invitation.`
+        `Google sign-in is only available for @${COMPANY_EMAIL_DOMAIN} accounts. ${token.email} can't be used.`
       );
     }
+    if (hasProfile) return Response.json({ status: 'existing' });
+
+    const invitation = await findPendingInvitation(email, token.email);
 
     let roleId: string;
     let roleSlug: RoleSlug;
@@ -67,14 +65,15 @@ export async function POST(req: NextRequest) {
       roleSlug = invitation.get('roleSlug');
       assignedFeatureIds = invitation.get('assignedFeatureIds') ?? [];
     } else {
-      const [roleSnap, settings] = await Promise.all([
+      // No invitation: Employee, with access to the HTML Hosting tool only.
+      const [roleSnap, featureSnap] = await Promise.all([
         db.collection('roles').where('slug', '==', RoleSlug.EMPLOYEE).limit(1).get(),
-        db.collection('system_settings').doc('global').get(),
+        db.collection('features').where('slug', '==', HTML_HOSTING_FEATURE_SLUG).limit(1).get(),
       ]);
       if (roleSnap.empty) throw new HttpError(500, 'Employee role is not set up.');
       roleId = roleSnap.docs[0].id;
       roleSlug = RoleSlug.EMPLOYEE;
-      assignedFeatureIds = settings.get('defaultEmployeeAccess') ?? [];
+      assignedFeatureIds = featureSnap.docs.map((d) => d.id);
     }
 
     const displayName = (token.name as string | undefined) || email.split('@')[0];

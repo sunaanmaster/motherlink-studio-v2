@@ -10,6 +10,7 @@ import { auth } from '@/lib/firebase/config';
 import { getUser, updateLastLogin } from '@/lib/firebase/firestore';
 import { getRoleById } from '@/lib/firebase/firestore';
 import type { UserProfile, Role, AuthContextType } from '@/lib/types';
+import { COMPANY_EMAIL_DOMAIN, isCompanyEmail } from '@/lib/utils/companyDomain';
 import {
   loginWithEmail,
   loginWithGoogle as firebaseLoginWithGoogle,
@@ -35,9 +36,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           // Fetch user profile from Firestore
           let profile = await getUser(user.uid);
 
-          // First Google sign-in: the server creates the profile (from an
-          // invitation or the company domain) or rejects the account.
-          if (!profile && user.providerData.some((p) => p.providerId === 'google.com')) {
+          const viaGoogle = (await user.getIdTokenResult()).signInProvider === 'google.com';
+          if (viaGoogle && profile && !isCompanyEmail(user.email)) {
+            // Google sign-in is for the company domain only, even for accounts
+            // that already exist. They can still use their email and password.
+            setAuthError(
+              `Google sign-in is only available for @${COMPANY_EMAIL_DOMAIN} accounts. Sign in with your email and password instead.`
+            );
+            await logoutUser();
+            return;
+          }
+
+          // First Google sign-in: the server creates the profile for a company
+          // account, or rejects (and removes) any other account.
+          if (!profile && viaGoogle) {
             const res = await fetch('/api/auth/google', {
               method: 'POST',
               headers: { Authorization: `Bearer ${await user.getIdToken()}` },
