@@ -19,12 +19,12 @@ const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 const STORAGE_KEY = 'motherlink-theme';
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>('dark');
+  const [theme, setThemeState] = useState<Theme>('light');
 
   useEffect(() => {
     const stored = (typeof window !== 'undefined' &&
       (localStorage.getItem(STORAGE_KEY) as Theme | null)) || null;
-    const initial: Theme = stored === 'light' || stored === 'dark' ? stored : 'dark';
+    const initial: Theme = stored === 'light' || stored === 'dark' ? stored : 'light';
     setThemeState(initial);
     document.documentElement.setAttribute('data-theme', initial);
   }, []);
