@@ -17,6 +17,7 @@ import {
   FileCode,
   Globe,
   KeyRound,
+  Link2,
   Lock,
   RefreshCw,
   Trash2,
@@ -29,6 +30,8 @@ import {
   MAX_HTML_BYTES,
   UPLOAD_PART_BYTES,
   MIN_PASSWORD_LENGTH,
+  SLUG_HINT,
+  SLUG_PATTERN,
   type HostedPage,
 } from '@/lib/html-hosting/types';
 
@@ -38,8 +41,64 @@ function formatSize(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-function pageUrl(id: string): string {
-  return `${publicBaseUrl()}${hostedPagePath(id)}`;
+function pageUrl(page: HostedPage): string {
+  return `${publicBaseUrl()}${hostedPagePath(page.urlKey)}`;
+}
+
+interface UploadProgress {
+  percent: number;
+  label: string;
+}
+
+const UPLOAD_CONCURRENCY = 3;
+const PART_ATTEMPTS = 3;
+
+// fetch() cannot report upload progress, so parts go through XMLHttpRequest.
+function putPart(url: string, body: Blob, token: string, onSent: (bytes: number) => void): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', url);
+    xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+    xhr.upload.onprogress = (e) => onSent(e.loaded);
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) return resolve();
+      let message = `Upload failed (${xhr.status})`;
+      try {
+        message = JSON.parse(xhr.responseText).error || message;
+      } catch {}
+      reject(new Error(message));
+    };
+    xhr.onerror = () => reject(new Error('Network error during upload. Check your connection and try again.'));
+    xhr.send(body);
+  });
+}
+
+function ProgressBar({ progress }: { progress: UploadProgress }) {
+  return (
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8125rem', marginBottom: 6 }}>
+        <span>{progress.label}</span>
+        <span className="mono">{Math.round(progress.percent)}%</span>
+      </div>
+      <div
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(progress.percent)}
+        style={{ height: 6, borderRadius: 3, background: 'var(--border)', overflow: 'hidden' }}
+      >
+        <div
+          style={{
+            height: '100%',
+            width: `${progress.percent}%`,
+            background: 'var(--primary)',
+            transition: 'width 300ms linear',
+          }}
+        />
+      </div>
+    </div>
+  );
 }
 
 export default function HtmlHosting() {
@@ -54,7 +113,7 @@ export default function HtmlHosting() {
   const [password, setPassword] = useState('');
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [progress, setProgress] = useState<number | null>(null);
+  const [progress, setProgress] = useState<UploadProgress | null>(null);
   const [deployedId, setDeployedId] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
@@ -65,6 +124,8 @@ export default function HtmlHosting() {
   const [newPassword, setNewPassword] = useState('');
   // The current password of the page being edited, once the user asks to see it.
   const [shownPassword, setShownPassword] = useState<{ id: string; password: string | null } | null>(null);
+  const [slugEditId, setSlugEditId] = useState<string | null>(null);
+  const [slugDraft, setSlugDraft] = useState('');
   const replaceInput = useRef<HTMLInputElement>(null);
   const replaceTargetId = useRef<string | null>(null);
 
@@ -115,11 +176,20 @@ export default function HtmlHosting() {
       throw new Error('This browser is too old to upload files. Please update it and try again.');
     }
 
-    setProgress(0);
+    // The bar follows real bytes: what the browser has sent, plus a final share
+    // of each part that is only credited once the server confirms it stored it.
+    let shown = 0;
+    const report = (percent: number, label: string) => {
+      shown = Math.max(shown, Math.min(percent, 100)); // never move backwards (e.g. on a retry)
+      setProgress({ percent: shown, label });
+    };
+
+    report(0, 'Preparing…');
     try {
       const compressed = await new Response(
         picked.stream().pipeThrough(new CompressionStream('gzip'))
       ).blob();
+      report(2, 'Uploading…');
 
       const { uploadId, partCount } = await api('/api/html-hosting/uploads', {
         method: 'POST',
@@ -132,20 +202,54 @@ export default function HtmlHosting() {
         }),
       });
 
-      for (let part = 0; part < partCount; part++) {
-        await api(`/api/html-hosting/uploads/${uploadId}?part=${part}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/octet-stream' },
-          body: compressed.slice(part * UPLOAD_PART_BYTES, (part + 1) * UPLOAD_PART_BYTES),
-        });
-        setProgress(Math.round(((part + 1) / partCount) * 100));
-      }
+      const sent = new Array<number>(partCount).fill(0);
+      const stored = new Array<boolean>(partCount).fill(false);
+      const partBlob = (part: number) =>
+        compressed.slice(part * UPLOAD_PART_BYTES, (part + 1) * UPLOAD_PART_BYTES);
+      const reportUpload = () => {
+        let credited = 0;
+        for (let part = 0; part < partCount; part++) {
+          const size = partBlob(part).size;
+          credited += stored[part] ? size : Math.min(sent[part], size) * 0.85;
+        }
+        report(2 + (credited / compressed.size) * 94, 'Uploading…');
+      };
 
+      let nextPart = 0;
+      const worker = async () => {
+        while (nextPart < partCount) {
+          const part = nextPart++;
+          for (let attempt = 1; ; attempt++) {
+            try {
+              if (!firebaseUser) throw new Error('Not signed in.');
+              await putPart(
+                `/api/html-hosting/uploads/${uploadId}?part=${part}`,
+                partBlob(part),
+                await firebaseUser.getIdToken(),
+                (bytes) => {
+                  sent[part] = bytes;
+                  reportUpload();
+                }
+              );
+              break;
+            } catch (err) {
+              sent[part] = 0;
+              if (attempt >= PART_ATTEMPTS) throw err;
+            }
+          }
+          stored[part] = true;
+          reportUpload();
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(UPLOAD_CONCURRENCY, partCount) }, worker));
+
+      report(97, 'Finishing…');
       const { page } = await api(`/api/html-hosting/uploads/${uploadId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: options.title, password: options.password || undefined }),
       });
+      report(100, 'Done');
       return page;
     } finally {
       setProgress(null);
@@ -188,10 +292,17 @@ export default function HtmlHosting() {
     }
   };
 
-  const copyLink = async (id: string) => {
-    await navigator.clipboard.writeText(pageUrl(id));
-    setCopiedId(id);
-    setTimeout(() => setCopiedId((current) => (current === id ? null : current)), 1500);
+  const copyLink = async (page: HostedPage) => {
+    await navigator.clipboard.writeText(pageUrl(page));
+    setCopiedId(page.id);
+    setTimeout(() => setCopiedId((current) => (current === page.id ? null : current)), 1500);
+  };
+
+  const handleSaveSlug = async (e: React.FormEvent, id: string, slug: string) => {
+    e.preventDefault();
+    const body = new FormData();
+    body.set('slug', slug.trim().toLowerCase());
+    if (await patchPage(id, body)) setSlugEditId(null);
   };
 
   const patchPage = async (id: string, body: FormData) => {
@@ -274,6 +385,8 @@ export default function HtmlHosting() {
     }
   };
 
+  const deployedPage = pages.find((p) => p.id === deployedId);
+
   return (
     <div style={{ height: '100%', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '24px' }}>
       {error && (
@@ -285,19 +398,19 @@ export default function HtmlHosting() {
 
       {busyId && progress !== null && (
         <div className="alert alert-info">
-          <span>Uploading replacement… {progress}%</span>
+          <ProgressBar progress={{ ...progress, label: `Replacing file: ${progress.label}` }} />
         </div>
       )}
 
-      {deployedId && (
+      {deployedPage && (
         <div className="alert alert-success" style={{ alignItems: 'center' }}>
           <Check size={16} style={{ flexShrink: 0 }} />
           <span className="mono" style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {pageUrl(deployedId)}
+            {pageUrl(deployedPage)}
           </span>
-          <button type="button" className="btn btn-sm btn-outline" onClick={() => copyLink(deployedId)}>
-            {copiedId === deployedId ? <Check size={14} /> : <Copy size={14} />}
-            <span style={{ marginLeft: 6 }}>{copiedId === deployedId ? 'Copied' : 'Copy link'}</span>
+          <button type="button" className="btn btn-sm btn-outline" onClick={() => copyLink(deployedPage)}>
+            {copiedId === deployedPage.id ? <Check size={14} /> : <Copy size={14} />}
+            <span style={{ marginLeft: 6 }}>{copiedId === deployedPage.id ? 'Copied' : 'Copy link'}</span>
           </button>
         </div>
       )}
@@ -382,12 +495,11 @@ export default function HtmlHosting() {
                 />
               </div>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '20px' }}>
+              {uploading && progress && <ProgressBar progress={progress} />}
               <button type="submit" className="btn btn-primary" disabled={uploading}>
                 <Upload size={16} />
-                <span style={{ marginLeft: 8 }}>
-                  {uploading ? (progress === null ? 'Deploying…' : `Uploading ${progress}%`) : 'Deploy'}
-                </span>
+                <span style={{ marginLeft: 8 }}>{uploading ? 'Deploying…' : 'Deploy'}</span>
               </button>
             </div>
           </div>
@@ -424,13 +536,13 @@ export default function HtmlHosting() {
                       <td>
                         <div style={{ fontWeight: 500 }}>{page.title}</div>
                         <a
-                          href={hostedPagePath(page.id)}
+                          href={hostedPagePath(page.urlKey)}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-dim mono"
                           style={{ fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                         >
-                          {hostedPagePath(page.id)} <ExternalLink size={11} />
+                          {hostedPagePath(page.urlKey)} <ExternalLink size={11} />
                         </a>
                       </td>
                       <td>
@@ -449,7 +561,7 @@ export default function HtmlHosting() {
                             type="button"
                             className="btn btn-icon btn-outline"
                             title="Copy link"
-                            onClick={() => copyLink(page.id)}
+                            onClick={() => copyLink(page)}
                           >
                             {copiedId === page.id ? <Check size={15} /> : <Copy size={15} />}
                           </button>
@@ -458,11 +570,25 @@ export default function HtmlHosting() {
                               <button
                                 type="button"
                                 className="btn btn-icon btn-outline"
+                                title="Change the link"
+                                disabled={busyId === page.id}
+                                onClick={() => {
+                                  setSlugDraft(page.slug ?? '');
+                                  closePasswordEdit();
+                                  setSlugEditId(slugEditId === page.id ? null : page.id);
+                                }}
+                              >
+                                <Link2 size={15} />
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-icon btn-outline"
                                 title={page.hasPassword ? 'Change or remove password' : 'Add a password'}
                                 disabled={busyId === page.id}
                                 onClick={() => {
                                   setNewPassword('');
                                   setShownPassword(null);
+                                  setSlugEditId(null);
                                   setPasswordEditId(passwordEditId === page.id ? null : page.id);
                                 }}
                               >
@@ -548,6 +674,52 @@ export default function HtmlHosting() {
                               </button>
                             )}
                             <button type="button" className="btn btn-ghost" onClick={closePasswordEdit}>
+                              Cancel
+                            </button>
+                          </form>
+                        </td>
+                      </tr>
+                    )}
+                    {slugEditId === page.id && (
+                      <tr>
+                        <td colSpan={6}>
+                          <form
+                            onSubmit={(e) => handleSaveSlug(e, page.id, slugDraft)}
+                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px', flexWrap: 'wrap' }}
+                          >
+                            <span className="text-dim" style={{ fontSize: '0.8125rem', marginRight: 'auto' }}>
+                              Changing the link makes the current one stop working. Use {SLUG_HINT}.
+                            </span>
+                            <span className="mono text-dim" style={{ fontSize: '0.8125rem' }}>{hostedPagePath('')}</span>
+                            <input
+                              type="text"
+                              value={slugDraft}
+                              required
+                              autoFocus
+                              autoComplete="off"
+                              spellCheck={false}
+                              placeholder="my-page-name"
+                              onChange={(e) => setSlugDraft(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}
+                              style={{ maxWidth: '260px' }}
+                            />
+                            <button
+                              type="submit"
+                              className="btn btn-primary"
+                              disabled={busyId === page.id || !SLUG_PATTERN.test(slugDraft) || slugDraft === page.slug}
+                            >
+                              Save link
+                            </button>
+                            {page.slug && (
+                              <button
+                                type="button"
+                                className="btn btn-outline"
+                                disabled={busyId === page.id}
+                                onClick={(e) => handleSaveSlug(e, page.id, '')}
+                              >
+                                Use default link
+                              </button>
+                            )}
+                            <button type="button" className="btn btn-ghost" onClick={() => setSlugEditId(null)}>
                               Cancel
                             </button>
                           </form>

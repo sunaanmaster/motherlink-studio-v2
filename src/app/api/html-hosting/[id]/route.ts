@@ -5,6 +5,7 @@
 //            title           rename
 //            password        set / change the password
 //            removePassword  "1" → make the page public
+//            slug            custom link name; empty → back to the default link
 //          (Replacing the HTML goes through /api/html-hosting/uploads.)
 // DELETE — take the page down.
 //
@@ -21,9 +22,11 @@ import {
   HttpError,
   logHostingActivity,
   requireCaller,
+  setPageSlug,
   toHostedPage,
   updatePage,
   validatePassword,
+  validateSlug,
 } from '@/lib/html-hosting/server';
 
 type Context = { params: Promise<{ id: string }> };
@@ -50,11 +53,17 @@ export async function PATCH(req: NextRequest, { params }: Context) {
     if (form.get('removePassword') === '1') changes.password = null;
     else if (password) changes.password = validatePassword(password);
 
-    if (Object.keys(changes).length === 0) throw new HttpError(400, 'Nothing to update.');
+    const slug = form.has('slug') ? validateSlug(form.get('slug')) : undefined;
+    const slugChanged = slug !== undefined && slug !== page.slug;
 
-    const updated = await updatePage(page, changes);
+    const changed = [...Object.keys(changes), ...(slugChanged ? ['slug'] : [])];
+    if (changed.length === 0) throw new HttpError(400, 'Nothing to update.');
+
+    // Slug first: it is the only step that can be refused (name taken).
+    let updated = slugChanged ? await setPageSlug(page, slug) : page;
+    if (Object.keys(changes).length > 0) updated = await updatePage(updated, changes);
     await logHostingActivity(caller, LogAction.HTML_PAGE_UPDATED, updated, {
-      changed: Object.keys(changes),
+      changed,
       passwordProtected: Boolean(updated.passwordHash),
     });
 

@@ -1,5 +1,6 @@
 // ============================================================
-// /s/[id] — public link for a hosted HTML page.
+// /s/[id] — public link for a hosted HTML page. [id] is the page's
+// custom slug if it has one, otherwise its id.
 //
 // GET  — serves the page, or the password prompt if it is
 //        protected and the visitor has not unlocked it yet.
@@ -15,9 +16,10 @@ import { isAdminConfigured } from '@/lib/firebase/admin';
 import {
   checkPassword,
   createUnlockCookie,
-  getPage,
+  getPageByKey,
   getPageHtmlStream,
   isUnlocked,
+  pageKey,
   unlockCookieName,
 } from '@/lib/html-hosting/server';
 
@@ -92,11 +94,12 @@ ${wrongPassword ? '<div class="error">Incorrect password. Try again.</div>' : ''
   });
 }
 
-async function loadPage(id: string) {
+// `key` is the last part of the link: a custom slug or the page id.
+async function loadPage(key: string) {
   if (!isAdminConfigured()) {
     return { error: messagePage('Unavailable', 'Page hosting is not configured yet.', 503) };
   }
-  const page = await getPage(id);
+  const page = await getPageByKey(key);
   if (!page) {
     return { error: messagePage('Page not found', 'This link is invalid or the page was removed.', 404) };
   }
@@ -104,11 +107,11 @@ async function loadPage(id: string) {
 }
 
 export async function GET(req: NextRequest, { params }: Context) {
-  const { id } = await params;
-  const { page, error } = await loadPage(id);
+  const { id: key } = await params;
+  const { page, error } = await loadPage(key);
   if (!page) return error;
 
-  if (page.passwordHash && !isUnlocked(page, req.cookies.get(unlockCookieName(id))?.value)) {
+  if (page.passwordHash && !isUnlocked(page, req.cookies.get(unlockCookieName(page.id))?.value)) {
     return passwordPrompt(false);
   }
 
@@ -119,12 +122,12 @@ export async function GET(req: NextRequest, { params }: Context) {
 }
 
 export async function POST(req: NextRequest, { params }: Context) {
-  const { id } = await params;
-  const { page, error } = await loadPage(id);
+  const { id: key } = await params;
+  const { page, error } = await loadPage(key);
   if (!page) return error;
 
   // Back to GET either way, so a refresh never re-submits the form.
-  const headers = new Headers({ Location: `/s/${id}`, 'Cache-Control': 'no-store' });
+  const headers = new Headers({ Location: `/s/${pageKey(page)}`, 'Cache-Control': 'no-store' });
   if (!page.passwordHash) return new Response(null, { status: 303, headers });
 
   let password: FormDataEntryValue | null = null;

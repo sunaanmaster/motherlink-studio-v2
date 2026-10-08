@@ -126,5 +126,8 @@ service cloud.firestore {
     match /hosted_uploads/{uploadId} {
       allow read, write: if false;
     }
+    match /hosted_slugs/{slug} {
+      allow read, write: if false;
+    }
   }
 }
