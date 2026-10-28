@@ -44,7 +44,10 @@ function messagePage(title: string, body: string, status: number): Response {
   });
 }
 
-const SHELL_CSP = "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'";
+// img-src 'self' lets the browser load the Motherlink tab icon; without it
+// Chrome refuses the icon on these screens.
+const SHELL_CSP =
+  "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'";
 
 function shell(title: string, content: string): string {
   return `<!DOCTYPE html>
@@ -54,6 +57,8 @@ function shell(title: string, content: string): string {
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="robots" content="noindex" />
 <title>${title}</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml" />
+<link rel="icon" href="/favicon.ico" sizes="48x48" />
 <style>
   * { box-sizing: border-box; }
   body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
